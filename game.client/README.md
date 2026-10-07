@@ -10,6 +10,15 @@ Frontend del juego de estrategia 1v1 de ejércitos de hormigas. Todo se dibuja c
 2. **Partida local:** botón "Partida local (sin servidor)". Tab cambia el jugador controlado.
 3. **Contra el servidor:** `cd ../game.server && go run ./cmd/server`. En el cliente, "Conectar" con el ID vacío crea la partida; el segundo jugador introduce ese ID. Ambos pulsan "¡Listo!".
 
+## Tests
+
+```bash
+godot --headless --path . --editor --quit                      # una vez: registra las clases
+godot --headless --path . --script res://tests/run_tests.gd    # todos los tests
+```
+
+Más detalles en `docs/AVANCE.md` §10.
+
 ## Controles
 
 | Entrada | Acción |

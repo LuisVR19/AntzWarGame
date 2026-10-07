@@ -23,6 +23,7 @@ Este documento explica qué hay, qué se verificó, qué no, y qué hacer primer
 | Cámara: zoom, pan, límites | ✅ |
 | UI: barra superior, panel de división con botones, registro de eventos, pantalla de fin | ✅ |
 | Modo debug (F3) | ✅ |
+| Tests automáticos (unitarios, integración y prueba de humo de escenas), ejecutables en headless | ✅ escritos, ❌ **sin ejecutar** |
 | **Probado ejecutando en Godot** | ❌ **pendiente** |
 | Ajuste visual (tamaños, colores, legibilidad) | ❌ pendiente (requiere verlo) |
 
@@ -30,7 +31,7 @@ Este documento explica qué hay, qué se verificó, qué no, y qué hacer primer
 
 ## 2. Qué se verificó sin Godot
 
-1. **Sintaxis GDScript:** los 39 scripts pasan el parser de `gdtoolkit` 4.x (`gdparse`).
+1. **Sintaxis GDScript:** los 47 scripts (39 del juego + 8 de tests) pasan el parser de `gdtoolkit` 4.x (`gdparse`).
 2. **Lint:** `gdlint` sin errores, con la configuración en `gdlintrc` (líneas de hasta 130 caracteres).
 3. **Referencias cruzadas** (con un script propio basado en expresiones regulares):
    - todos los `res://...` existen;
@@ -55,10 +56,11 @@ Este documento explica qué hay, qué se verificó, qué no, y qué hacer primer
    - La primera vez Godot escanea el proyecto, crea `.godot/` y registra los `class_name`. **No ejecutar en modo headless antes de abrirlo en el editor**, o las clases globales no estarán registradas.
    - Godot puede añadir `uid=` a las escenas y crear archivos `.uid` (4.4+). Es normal; conviene hacer commit de esos cambios.
 3. Revisar el panel **Errores / Depurador** y la pestaña *Output*. Corregir lo que marque el analizador (ver sección 7, riesgos).
-4. Pulsar **F5**. Debería aparecer el menú principal.
-5. **Partida local:** botón "Partida local (sin servidor)". Seguir el guion de la sección 4.
-6. **Contra el servidor:** en `../game.server` ejecutar `go run ./cmd/server`. Abrir dos instancias del juego (en Godot: *Debug → Customize Run Instances… → 2*) y usar "Conectar": una con ID vacío (crea la partida) y la otra con el ID que aparece en la barra superior de la primera. Pulsar "¡Listo!" en ambas.
-7. Opcional: crear un `Theme` y una fuente propia, y ajustar `scripts/core/palette.gd`.
+4. **Ejecutar los tests** (sección 10). Son la forma más rápida de detectar errores de ejecución antes de probar a mano.
+5. Pulsar **F5**. Debería aparecer el menú principal.
+6. **Partida local:** botón "Partida local (sin servidor)". Seguir el guion de la sección 4.
+7. **Contra el servidor:** en `../game.server` ejecutar `go run ./cmd/server`. Abrir dos instancias del juego (en Godot: *Debug → Customize Run Instances… → 2*) y usar "Conectar": una con ID vacío (crea la partida) y la otra con el ID que aparece en la barra superior de la primera. Pulsar "¡Listo!" en ambas.
+8. Opcional: crear un `Theme` y una fuente propia, y ajustar `scripts/core/palette.gd`.
 
 ---
 
@@ -180,16 +182,49 @@ Ordenados de más a menos probable:
 
 ## 8. Siguientes pasos sugeridos (después de que funcione)
 
-- Tests automáticos de `LocalGameSimulation` con GUT o `SceneTree` en modo headless (lógica pura, fácil de testear).
 - Reconexión automática a la partida usando el `session_token` (ya se guarda en `GameStateSource.session_token`; falta reintentar tras una desconexión).
 - Selección múltiple: `SelectionManager` ya trabaja con listas; faltan la selección por arrastre y el envío de una orden por cada división.
 - Pathfinding en la simulación local (sustituir `MovementSystem` por `AStarGrid2D`), o usar siempre el servidor.
 - Niebla de guerra: el servidor ya filtra la información por jugador; en el cliente bastará con no dibujar lo que no llega.
 
-## 9. Herramientas usadas para validar (reproducibles)
+## 9. Herramientas de validación estática (reproducibles sin Godot)
 
 ```bash
 pip install "gdtoolkit==4.*"
 gdparse scripts/**/*.gd      # sintaxis
 gdlint scripts               # estilo (usa ./gdlintrc)
 ```
+
+---
+
+## 10. Tests automáticos
+
+Usan un runner propio, sin plugins: `tests/run_tests.gd` y `tests/framework/test_case.gd`.
+
+```bash
+# 1) Una sola vez: registrar las clases globales (class_name).
+#    Basta con abrir el proyecto en el editor, o en terminal:
+godot --headless --path . --editor --quit
+
+# 2) Ejecutar todos los tests (código de salida 0 = OK, 1 = fallos)
+godot --headless --path . --script res://tests/run_tests.gd
+
+# Solo los archivos cuya ruta contiene un texto:
+godot --headless --path . --script res://tests/run_tests.gd -- --filter=simulation
+```
+
+| Archivo | Qué cubre |
+|---------|-----------|
+| `tests/unit/test_terrain_map.gd` | valores de terreno desde JSON, mapa por defecto (río, vados, bosque, colina, bases), ida y vuelta del protocolo del mapa |
+| `tests/unit/test_protocol_parsing.gd` | `Order.to_message()` igual al protocolo del servidor, `DivisionData`/`BattleState` desde mensajes reales del servidor, parser de `GameStateSource` (sesión, lobby, errores, victoria/derrota/empate) |
+| `tests/unit/test_movement_combat.gd` | velocidad por terreno, bloqueo por agua, sin pasarse del destino; combate simétrico, determinista, terreno, posturas, moral y límites de bajas |
+| `tests/unit/test_local_simulation.gd` | cuenta atrás, validación de órdenes (10 casos de error), orden aplicada en el siguiente tick, llegada, cambio de órdenes, río que bloquea, encuentro y combate, persecución, restricciones en combate, retirada, destrucción y victoria, desbandada y reagrupamiento, límite de tiempo, partida completa con guion (determinismo + invariantes) |
+| `tests/integration/test_local_game_state.gd` | `LocalGameState` completo a través de sus señales: inicio, órdenes, movimiento, rechazo `not_owner`, hot-seat |
+| `tests/integration/test_battle_scene.gd` | **prueba de humo de las escenas reales**: menú → batalla local → seleccionar → clic derecho (MOVER) → modo ATACAR → división enemiga con botones deshabilitados → debug → zoom → volver al menú |
+
+Notas:
+- Cada test termina con `return done()`. Si un error de ejecución lo aborta, el runner lo marca como **abortado**; el detalle aparece como `SCRIPT ERROR` en la salida.
+- Los tests acceden a algunos miembros privados (`_views`, `_by_id`…) a propósito, para comprobar el estado interno sin exponerlo en la API.
+- Las coordenadas de los tests de simulación dependen de `data/definitions/map_default.json`. Si se cambia el mapa, hay que revisarlas.
+- Para CI: cualquier imagen con Godot 4 en headless sirve (por ejemplo `barichello/godot-ci`) con los dos comandos de arriba.
+- **Si fallan muchos tests a la vez**, empezar por el primer `SCRIPT ERROR` de la salida: suele ser un único problema de tipos que arrastra al resto.
