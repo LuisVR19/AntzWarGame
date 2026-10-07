@@ -1,0 +1,5 @@
+[
+  { "name": "1a Division Obrera",  "offset": { "x": 0,   "y": -150 }, "unit_count": 3000, "attack": 10, "defense": 12, "speed": 30, "morale": 80, "experience": 10 },
+  { "name": "2a Division Obrera",  "offset": { "x": 0,   "y": 150 },  "unit_count": 3000, "attack": 10, "defense": 12, "speed": 30, "morale": 80, "experience": 10 },
+  { "name": "1a Division Soldado", "offset": { "x": -80, "y": 0 },    "unit_count": 2000, "attack": 16, "defense": 8,  "speed": 45, "morale": 85, "experience": 20 }
+]

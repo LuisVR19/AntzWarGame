@@ -1,0 +1,33 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/battle/battle_controller.gd" id="1_controller"]
+[ext_resource type="Script" path="res://scripts/battle/map_view.gd" id="2_map_view"]
+[ext_resource type="Script" path="res://scripts/battle/battle_layer.gd" id="3_battle_layer"]
+[ext_resource type="Script" path="res://scripts/battle/division_layer.gd" id="4_division_layer"]
+[ext_resource type="Script" path="res://scripts/battle/battle_camera.gd" id="5_camera"]
+[ext_resource type="Script" path="res://scripts/battle/selection_manager.gd" id="6_selection"]
+[ext_resource type="Script" path="res://scripts/battle/battle_input.gd" id="7_input"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="8_hud"]
+
+[node name="Battle" type="Node2D"]
+script = ExtResource("1_controller")
+
+[node name="MapView" type="Node2D" parent="."]
+script = ExtResource("2_map_view")
+
+[node name="BattleLayer" type="Node2D" parent="."]
+script = ExtResource("3_battle_layer")
+
+[node name="DivisionLayer" type="Node2D" parent="."]
+script = ExtResource("4_division_layer")
+
+[node name="Camera" type="Camera2D" parent="."]
+script = ExtResource("5_camera")
+
+[node name="SelectionManager" type="Node" parent="."]
+script = ExtResource("6_selection")
+
+[node name="BattleInput" type="Node2D" parent="."]
+script = ExtResource("7_input")
+
+[node name="HUD" parent="." instance=ExtResource("8_hud")]

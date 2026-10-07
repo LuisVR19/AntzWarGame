@@ -1,0 +1,120 @@
+{
+  "server": {
+    "addr": ":8080",
+    "allowed_origins": null,
+    "send_queue_size": 256,
+    "max_message_bytes": 8192,
+    "write_timeout_seconds": 5,
+    "pong_timeout_seconds": 30,
+    "request_timeout_seconds": 5
+  },
+  "rooms": {
+    "max_games": 500,
+    "snapshot_every_ticks": 1,
+    "waiting_timeout_seconds": 900,
+    "finished_retention_seconds": 60
+  },
+  "log": {
+    "level": "info",
+    "format": "text"
+  },
+  "game": {
+    "tick_rate": 10,
+    "start_countdown_ticks": 30,
+    "max_duration_ticks": 12000,
+    "disconnect_grace_ticks": 300,
+    "engagement_range": 60,
+    "disengage_range": 90,
+    "combat_round_ticks": 10,
+    "path_recompute_ticks": 5,
+    "destroyed_unit_threshold": 100,
+    "rout_morale_threshold": 20,
+    "rally_morale_threshold": 50,
+    "morale_recovery_per_second": 1,
+    "max_morale": 100,
+    "fatigue_move_per_second": 0.5,
+    "fatigue_recovery_per_second": 1,
+    "retreat_speed_multiplier": 1.2,
+    "min_fatigue_speed_factor": 0.6,
+    "army": [
+      {
+        "name": "1st Infantry",
+        "offset": {
+          "x": 0,
+          "y": -150
+        },
+        "unit_count": 3000,
+        "attack": 10,
+        "defense": 12,
+        "speed": 30,
+        "morale": 80,
+        "experience": 10
+      },
+      {
+        "name": "2nd Infantry",
+        "offset": {
+          "x": 0,
+          "y": 150
+        },
+        "unit_count": 3000,
+        "attack": 10,
+        "defense": 12,
+        "speed": 30,
+        "morale": 80,
+        "experience": 10
+      },
+      {
+        "name": "1st Armored",
+        "offset": {
+          "x": -80,
+          "y": 0
+        },
+        "unit_count": 2000,
+        "attack": 16,
+        "defense": 8,
+        "speed": 45,
+        "morale": 85,
+        "experience": 20
+      }
+    ],
+    "combat": {
+      "base_casualty_rate": 0.02,
+      "min_ratio": 0.25,
+      "max_ratio": 4,
+      "morale_loss_base": 0.5,
+      "morale_loss_per_loss_pct": 1.5,
+      "fatigue_per_round": 1.5,
+      "experience_per_round": 0.4,
+      "defend_defense_bonus": 1.25,
+      "attacking_attack_bonus": 1.1,
+      "retreating_attack_factor": 0.5,
+      "retreating_defense_factor": 0.7
+    }
+  },
+  "terrain": {
+    "FOREST": {
+      "movement_modifier": 0.7,
+      "attack_modifier": 0.9,
+      "defense_modifier": 1.2,
+      "visibility_modifier": 0.6
+    },
+    "HILL": {
+      "movement_modifier": 0.8,
+      "attack_modifier": 1.1,
+      "defense_modifier": 1.3,
+      "visibility_modifier": 1.3
+    },
+    "PLAIN": {
+      "movement_modifier": 1,
+      "attack_modifier": 1,
+      "defense_modifier": 1,
+      "visibility_modifier": 1
+    },
+    "WATER": {
+      "movement_modifier": 0,
+      "attack_modifier": 0,
+      "defense_modifier": 0,
+      "visibility_modifier": 1
+    }
+  }
+}

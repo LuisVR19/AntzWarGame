@@ -1,0 +1,21 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/ui/top_bar.tscn" id="2_top_bar"]
+[ext_resource type="PackedScene" path="res://scenes/ui/division_panel.tscn" id="3_division_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/event_log.tscn" id="4_event_log"]
+[ext_resource type="PackedScene" path="res://scenes/ui/debug_overlay.tscn" id="5_debug_overlay"]
+[ext_resource type="PackedScene" path="res://scenes/ui/game_over_panel.tscn" id="6_game_over"]
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_script")
+
+[node name="TopBar" parent="." instance=ExtResource("2_top_bar")]
+
+[node name="DivisionPanel" parent="." instance=ExtResource("3_division_panel")]
+
+[node name="EventLog" parent="." instance=ExtResource("4_event_log")]
+
+[node name="DebugOverlay" parent="." instance=ExtResource("5_debug_overlay")]
+
+[node name="GameOverPanel" parent="." instance=ExtResource("6_game_over")]

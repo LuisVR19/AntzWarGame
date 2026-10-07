@@ -1,0 +1,114 @@
+package game
+
+import (
+	"errors"
+	"fmt"
+
+	"gameserver/internal/combat"
+	"gameserver/pkg/geom"
+)
+
+// DivisionTemplate describes a division created at game start. Offset is
+// relative to the side's spawn and mirrored horizontally for side 1.
+type DivisionTemplate struct {
+	Name       string    `json:"name"`
+	Offset     geom.Vec2 `json:"offset"`
+	UnitCount  int       `json:"unit_count"`
+	Attack     float64   `json:"attack"`
+	Defense    float64   `json:"defense"`
+	Speed      float64   `json:"speed"` // world units per second
+	Morale     float64   `json:"morale"`
+	Experience float64   `json:"experience"`
+}
+
+// Rules holds every tunable of the simulation. Values come from config.
+type Rules struct {
+	TickRate             int   `json:"tick_rate"`             // ticks per second
+	StartCountdownTicks  int   `json:"start_countdown_ticks"` // STARTING duration
+	MaxDurationTicks     int64 `json:"max_duration_ticks"`    // 0 = unlimited
+	DisconnectGraceTicks int64 `json:"disconnect_grace_ticks"`
+
+	EngagementRange    float64 `json:"engagement_range"`
+	DisengageRange     float64 `json:"disengage_range"`
+	CombatRoundTicks   int     `json:"combat_round_ticks"`
+	PathRecomputeTicks int     `json:"path_recompute_ticks"`
+
+	DestroyedUnitThreshold   int     `json:"destroyed_unit_threshold"`
+	RoutMoraleThreshold      float64 `json:"rout_morale_threshold"`
+	RallyMoraleThreshold     float64 `json:"rally_morale_threshold"`
+	MoraleRecoveryPerSecond  float64 `json:"morale_recovery_per_second"`
+	MaxMorale                float64 `json:"max_morale"`
+	FatigueMovePerSecond     float64 `json:"fatigue_move_per_second"`
+	FatigueRecoveryPerSecond float64 `json:"fatigue_recovery_per_second"`
+	RetreatSpeedMultiplier   float64 `json:"retreat_speed_multiplier"`
+	// MinFatigueSpeedFactor is the speed factor at 100 fatigue.
+	MinFatigueSpeedFactor float64 `json:"min_fatigue_speed_factor"`
+
+	Army   []DivisionTemplate `json:"army"`
+	Combat combat.Params      `json:"combat"`
+}
+
+// DefaultRules returns the default MVP tuning.
+func DefaultRules() Rules {
+	return Rules{
+		TickRate:             10,
+		StartCountdownTicks:  30,
+		MaxDurationTicks:     20 * 60 * 10,
+		DisconnectGraceTicks: 30 * 10,
+
+		EngagementRange:    60,
+		DisengageRange:     90,
+		CombatRoundTicks:   10,
+		PathRecomputeTicks: 5,
+
+		DestroyedUnitThreshold:   100,
+		RoutMoraleThreshold:      20,
+		RallyMoraleThreshold:     50,
+		MoraleRecoveryPerSecond:  1.0,
+		MaxMorale:                100,
+		FatigueMovePerSecond:     0.5,
+		FatigueRecoveryPerSecond: 1.0,
+		RetreatSpeedMultiplier:   1.2,
+		MinFatigueSpeedFactor:    0.6,
+
+		Army: []DivisionTemplate{
+			{Name: "1st Infantry", Offset: geom.V(0, -150), UnitCount: 3000, Attack: 10, Defense: 12, Speed: 30, Morale: 80, Experience: 10},
+			{Name: "2nd Infantry", Offset: geom.V(0, 150), UnitCount: 3000, Attack: 10, Defense: 12, Speed: 30, Morale: 80, Experience: 10},
+			{Name: "1st Armored", Offset: geom.V(-80, 0), UnitCount: 2000, Attack: 16, Defense: 8, Speed: 45, Morale: 85, Experience: 20},
+		},
+		Combat: combat.DefaultParams(),
+	}
+}
+
+// DT returns the simulated seconds per tick.
+func (r Rules) DT() float64 { return 1 / float64(r.TickRate) }
+
+// Validate checks the rules for obviously broken values.
+func (r Rules) Validate() error {
+	switch {
+	case r.TickRate <= 0 || r.TickRate > 60:
+		return errors.New("rules: tick_rate must be in 1..60")
+	case r.StartCountdownTicks < 0:
+		return errors.New("rules: start_countdown_ticks must be >= 0")
+	case r.EngagementRange <= 0:
+		return errors.New("rules: engagement_range must be > 0")
+	case r.DisengageRange < r.EngagementRange:
+		return errors.New("rules: disengage_range must be >= engagement_range")
+	case r.CombatRoundTicks <= 0:
+		return errors.New("rules: combat_round_ticks must be > 0")
+	case r.PathRecomputeTicks <= 0:
+		return errors.New("rules: path_recompute_ticks must be > 0")
+	case r.RallyMoraleThreshold < r.RoutMoraleThreshold:
+		return errors.New("rules: rally_morale_threshold must be >= rout_morale_threshold")
+	case r.MaxMorale <= 0:
+		return errors.New("rules: max_morale must be > 0")
+	case len(r.Army) == 0:
+		return errors.New("rules: army must contain at least one division")
+	}
+	for i, t := range r.Army {
+		if t.UnitCount <= r.DestroyedUnitThreshold || t.Speed <= 0 || t.Attack < 0 || t.Defense <= 0 {
+			return fmt.Errorf("rules: army[%d] %q has invalid stats", i, t.Name)
+		}
+	}
+	return nil
+}

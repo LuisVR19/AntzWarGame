@@ -1,0 +1,75 @@
+class_name MainMenu
+extends Control
+## Entry screen: play locally (mock simulation) or connect to the Go server.
+
+signal local_requested
+signal online_requested(url: String, player_name: String, game_id: String)
+
+const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
+
+var _name: LineEdit
+var _url: LineEdit
+var _game_id: LineEdit
+
+
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	var bg := ColorRect.new()
+	bg.color = Color(0.07, 0.08, 0.07)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	var panel := PanelContainer.new()
+	UiStyle.apply_panel(panel, Palette.PANEL_BG, 24.0)
+	center.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(420, 0)
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+
+	var title := UiStyle.label("AntzGame", 40, Palette.BAR_MORALE)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var subtitle := UiStyle.label("Estrategia 1v1 de ejércitos de hormigas · MVP", 14, Palette.TEXT_DIM)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(subtitle)
+	box.add_child(HSeparator.new())
+
+	box.add_child(UiStyle.label("Nombre", 13, Palette.TEXT_DIM))
+	_name = _line_edit("Jugador")
+	box.add_child(_name)
+
+	var local := UiStyle.button("Partida local (sin servidor)")
+	local.pressed.connect(func() -> void: local_requested.emit())
+	box.add_child(local)
+	box.add_child(UiStyle.label("Un solo jugador controla ambos ejércitos (Tab para cambiar).", 12, Palette.TEXT_DIM))
+
+	box.add_child(HSeparator.new())
+	box.add_child(UiStyle.label("Servidor Go (WebSocket)", 13, Palette.TEXT_DIM))
+	_url = _line_edit(DEFAULT_URL)
+	box.add_child(_url)
+	_game_id = _line_edit("")
+	_game_id.placeholder_text = "ID de partida (vacío = crear una nueva)"
+	box.add_child(_game_id)
+	var online := UiStyle.button("Conectar")
+	online.pressed.connect(_on_online_pressed)
+	box.add_child(online)
+
+
+func _line_edit(text: String) -> LineEdit:
+	var e := LineEdit.new()
+	e.text = text
+	e.custom_minimum_size = Vector2(0, 32)
+	return e
+
+
+func _on_online_pressed() -> void:
+	var player_name := _name.text.strip_edges()
+	if player_name.is_empty():
+		player_name = "Jugador"
+	online_requested.emit(_url.text.strip_edges(), player_name, _game_id.text.strip_edges())

@@ -1,0 +1,6 @@
+{
+  "PLAIN":  { "movement_modifier": 1.0, "attack_modifier": 1.0, "defense_modifier": 1.0, "visibility_modifier": 1.0 },
+  "FOREST": { "movement_modifier": 0.7, "attack_modifier": 0.9, "defense_modifier": 1.2, "visibility_modifier": 0.6 },
+  "HILL":   { "movement_modifier": 0.8, "attack_modifier": 1.1, "defense_modifier": 1.3, "visibility_modifier": 1.3 },
+  "WATER":  { "movement_modifier": 0.0, "attack_modifier": 0.0, "defense_modifier": 0.0, "visibility_modifier": 1.0 }
+}

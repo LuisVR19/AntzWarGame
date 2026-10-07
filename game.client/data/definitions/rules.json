@@ -1,0 +1,31 @@
+{
+  "_comment": "Reglas de la simulacion LOCAL (modo sin servidor). Mismos nombres y valores por defecto que game.server/configs/server.json.",
+  "tick_rate": 10,
+  "start_countdown_ticks": 20,
+  "max_duration_ticks": 12000,
+  "engagement_range": 60,
+  "disengage_range": 90,
+  "combat_round_ticks": 10,
+  "destroyed_unit_threshold": 100,
+  "rout_morale_threshold": 20,
+  "rally_morale_threshold": 50,
+  "morale_recovery_per_second": 1.0,
+  "max_morale": 100,
+  "fatigue_move_per_second": 0.5,
+  "fatigue_recovery_per_second": 1.0,
+  "retreat_speed_multiplier": 1.2,
+  "min_fatigue_speed_factor": 0.6,
+  "combat": {
+    "base_casualty_rate": 0.02,
+    "min_ratio": 0.25,
+    "max_ratio": 4.0,
+    "morale_loss_base": 0.5,
+    "morale_loss_per_loss_pct": 1.5,
+    "fatigue_per_round": 1.5,
+    "experience_per_round": 0.4,
+    "defend_defense_bonus": 1.25,
+    "attacking_attack_bonus": 1.1,
+    "retreating_attack_factor": 0.5,
+    "retreating_defense_factor": 0.7
+  }
+}
