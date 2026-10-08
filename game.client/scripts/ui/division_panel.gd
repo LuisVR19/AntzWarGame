@@ -20,7 +20,12 @@ const STATS := [
 	["formation", "Formación"],
 	["state", "Estado"],
 	["order", "Orden actual"],
+	["command", "Mando"],
+	["link", "Enlace"],
+	["pending", "Orden pendiente"],
 ]
+## Chain-of-command rows, only shown for own divisions on the Go server.
+const COMMAND_STATS := ["command", "link", "pending"]
 const BUTTONS := [
 	["MOVE", "MOVER [1]"],
 	["ATTACK", "ATACAR [2]"],
@@ -29,15 +34,18 @@ const BUTTONS := [
 	["HOLD", "MANTENER [5]"],
 	["SPLIT", "DIVIDIR [6]"],
 	["MERGE", "UNIR [7]"],
+	["ASSIGN", "REASIGNAR MANDO [8]"],
 ]
 ## Orders only some game sources support (see GameStateSource).
 const SPLIT_MERGE := ["SPLIT", "MERGE"]
+const COMMAND_ONLY := ["ASSIGN"]
 
 var _title: Label
 var _owner: Label
 var _empty: Label
 var _details: VBoxContainer
 var _values: Dictionary = {}  # stat key -> Label
+var _names: Dictionary = {}  # stat key -> Label with the stat name
 var _buttons: Dictionary = {}  # order type -> Button
 var _hint: Label
 var _info: GridContainer  # rows of a selected building/resource
@@ -78,7 +86,9 @@ func _ready() -> void:
 	grid.add_theme_constant_override("h_separation", 16)
 	_details.add_child(grid)
 	for stat in STATS:
-		grid.add_child(UiStyle.label(stat[1], 13, Palette.TEXT_DIM))
+		var stat_name := UiStyle.label(stat[1], 13, Palette.TEXT_DIM)
+		_names[stat[0]] = stat_name
+		grid.add_child(stat_name)
 		var value := UiStyle.label("-", 13)
 		value.autowrap_mode = TextServer.AUTOWRAP_WORD
 		value.custom_minimum_size = Vector2(150, 0)
@@ -106,6 +116,7 @@ func _ready() -> void:
 		_details.add_child(b)
 		_buttons[order_type] = b
 
+	set_command_info(false, "", "", "")
 	_hint = UiStyle.label("", 13, Palette.SELECTION)
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_hint.custom_minimum_size = Vector2(WIDTH - 20.0, 0)
@@ -179,6 +190,20 @@ func set_formations_available(available: bool) -> void:
 func set_split_merge_available(available: bool) -> void:
 	for order_type in SPLIT_MERGE:
 		_buttons[order_type].visible = available
+
+
+func set_command_available(available: bool) -> void:
+	for order_type in COMMAND_ONLY:
+		_buttons[order_type].visible = available
+
+
+## Chain-of-command rows of the selected division (hidden when not shown).
+func set_command_info(shown: bool, command_text: String, link_text: String, pending_text: String) -> void:
+	var texts := {"command": command_text, "link": link_text, "pending": pending_text}
+	for key in COMMAND_STATS:
+		_names[key].visible = shown
+		_values[key].visible = shown
+		_set_value(key, str(texts[key]))
 
 
 func set_mode_hint(text: String) -> void:

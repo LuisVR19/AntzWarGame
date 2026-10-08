@@ -9,12 +9,16 @@ signal exit_requested
 
 ## Spacing used for group moves when the source does not send radii (server).
 const GROUP_FALLBACK_RADIUS := 30.0
+## Command mode / button type: put the selection under a general or commander.
+const ASSIGN_COMMANDER := "ASSIGN"
 
 @export var visual_config: VisualConfig
 
 var source: GameStateSource
 var projection: IsoProjection
 var map_objects: MapObjects = MapObjects.new()
+## Chain of command overlay (generals, commanders, messengers), built in _ready.
+var command_layer: CommandLayer
 var _command_mode := ""  # "", Order.MOVE or Order.ATTACK (waiting for a click)
 var _debug := false
 var _finished := false
@@ -63,6 +67,12 @@ func _ready() -> void:
 	hud.top_bar.switch_player_pressed.connect(_switch_player)
 	hud.top_bar.menu_pressed.connect(_exit)
 	hud.game_over.back_pressed.connect(_exit)
+	battle_input.command_radii_toggled.connect(_toggle_command_radii)
+	command_layer = CommandLayer.new()
+	command_layer.name = "CommandLayer"
+	command_layer.z_index = 50
+	add_child(command_layer)
+	command_layer.setup(projection, division_layer)
 
 
 ## Called by Main right after adding the scene to the tree.
@@ -84,6 +94,8 @@ func start(p_source: GameStateSource) -> void:
 	hud.action_menu.set_split_merge_available(source.supports_split_merge())
 	hud.division_panel.set_formations_available(source.supports_formations())
 	hud.action_menu.set_formations_available(source.supports_formations())
+	hud.division_panel.set_command_available(source.supports_command())
+	hud.action_menu.set_command_available(source.supports_command())
 	hud.event_log.add_entry("Fuente de partida: %s" % source.source_name(), Palette.LOG_INFO)
 	hud.top_bar.set_status_text(source.loading_text())
 	source.start()
@@ -121,6 +133,7 @@ func _on_map_received(map: MapData) -> void:
 	division_layer.set_map(map)
 	division_layer.setup(projection, visual_config)
 	battle_layer.setup(projection)
+	command_layer.setup(projection, division_layer)
 	camera.set_bounds(projection.map_rect(map.cols, map.rows))
 	_on_zoom_changed(camera.zoom.x)
 
@@ -135,6 +148,7 @@ func _on_state_updated(state: BattleState) -> void:
 	_drop_vanished_selection(state)
 	division_layer.sync_state(state, source.local_player_id)
 	battle_layer.sync_battles(state.battles)
+	command_layer.sync(state, source.local_player_id)
 	if state.status != GameTypes.STATUS_WAITING:
 		hud.top_bar.set_ready_visible(false)
 	_refresh_top_bar()
@@ -191,6 +205,8 @@ func _on_connection_lost(reason: String) -> void:
 func _on_primary_clicked(screen_pos: Vector2, additive := false) -> void:
 	var world_pos := projection.screen_to_world(screen_pos)
 	var clicked := _pick(screen_pos)
+	if _command_mode == Order.ATTACK or _command_mode == Order.MERGE:
+		clicked = _as_division(clicked)
 	if _command_mode == Order.MOVE:
 		_issue_move(world_pos)
 		_cancel_command_mode()
@@ -200,6 +216,14 @@ func _on_primary_clicked(screen_pos: Vector2, additive := false) -> void:
 				_issue(Order.attack(id, clicked))
 		else:
 			hud.event_log.add_entry("Ataque cancelado: haz clic sobre una división enemiga", Palette.LOG_ERROR)
+		_cancel_command_mode()
+	elif _command_mode == ASSIGN_COMMANDER:
+		var command := source.state.get_command(clicked)
+		if command != null and command.player_id == source.local_player_id and command.is_active():
+			for id in _commandable_ids():
+				source.assign_commander(id, command.id)
+		else:
+			hud.event_log.add_entry("Reasignación cancelada: haz clic sobre un general o comandante propio activo", Palette.LOG_ERROR)
 		_cancel_command_mode()
 	elif _command_mode == Order.MERGE:
 		var ids := _commandable_ids()
@@ -235,9 +259,18 @@ func _on_secondary_clicked(screen_pos: Vector2) -> void:
 			_issue(Order.attack(id, clicked))
 
 
-## Entity under a screen point: divisions first, then buildings, resources.
+## A command marker stands for its host division when a division is expected.
+func _as_division(id: String) -> String:
+	var command := source.state.get_command(id)
+	return command.host_division_id if command != null else id
+
+
+## Entity under a screen point: command markers (drawn above the divisions)
+## first, then divisions, buildings and resources.
 func _pick(screen_pos: Vector2) -> String:
-	var id := division_layer.pick(screen_pos)
+	var id := command_layer.pick(screen_pos)
+	if id.is_empty():
+		id = division_layer.pick(screen_pos)
 	if id.is_empty():
 		id = building_layer.pick(screen_pos)
 	if id.is_empty():
@@ -264,6 +297,8 @@ func _on_order_requested(order_type: String) -> void:
 	elif order_type == Order.HOLD:
 		for id in ids:
 			_issue(Order.hold(id))
+	elif order_type == ASSIGN_COMMANDER and source.supports_command():
+		_set_command_mode(ASSIGN_COMMANDER, "Haz clic en un general o comandante propio para ponerlo al mando (Esc cancela)")
 	elif order_type == Order.SPLIT and source.supports_split_merge():
 		for id in ids:
 			_issue(Order.split(id))
@@ -289,6 +324,8 @@ func _on_selection_changed(ids: Array) -> void:
 	_cancel_command_mode()
 	hud.action_menu.close()
 	division_layer.set_selection(ids)
+	var primary := selection.primary()
+	command_layer.selected_command_id = primary if source.state.get_command(primary) != null else ""
 	building_layer.set_selection(ids)
 	resource_layer.set_selection(ids)
 	_refresh_panel()
@@ -424,7 +461,8 @@ func _is_friendly(division_id: String) -> bool:
 func _drop_vanished_selection(state: BattleState) -> void:
 	var kept: Array = []
 	for id in selection.ids():
-		if state.get_division(id) != null or map_objects.building(id) != null or map_objects.resource(id) != null:
+		if state.get_division(id) != null or state.get_command(id) != null \
+				or map_objects.building(id) != null or map_objects.resource(id) != null:
 			kept.append(id)
 	if kept.size() == selection.count():
 		return
@@ -503,10 +541,15 @@ func _refresh_panel() -> void:
 		owner_text += " · %d seleccionadas: las órdenes van a todas" % selection.count()
 	hud.division_panel.show_division(d, owner_text, Palette.side_color(state.side_of(d.player_id)),
 		EventFormatter.describe_order(d.order, state), not _commandable_selection().is_empty())
+	_refresh_command_rows(d)
 
 
-## Panel for a selected building or resource (or empty).
+## Panel for a selected general/commander, building or resource (or empty).
 func _refresh_panel_object(id: String) -> void:
+	var command := source.state.get_command(id)
+	if command != null:
+		_show_command_panel(command)
+		return
 	var b := map_objects.building(id)
 	if b != null:
 		hud.division_panel.show_info(b.display_name, "Edificio %s" % Palette.side_name(b.side), Palette.side_color(b.side), [
@@ -523,6 +566,61 @@ func _refresh_panel_object(id: String) -> void:
 		])
 		return
 	hud.division_panel.show_empty()
+
+
+## General/commander panel: status, radii and, for own units, the
+## subordinate divisions and whether each one is within the comm radius.
+func _show_command_panel(c: CommandData) -> void:
+	var state := source.state
+	var rows := [
+		["Rol", c.role_label()],
+		["Estado", CommandData.status_label(c.status)],
+		["División anfitriona", state.division_name(c.host_division_id)],
+		["Radio de comunicación", str(roundi(c.comm_radius))],
+		["Radio de influencia", str(roundi(c.influence_radius))],
+	]
+	if c.player_id == source.local_player_id:
+		var subordinates := state.subordinates(c.id)
+		var in_range := 0
+		for d in subordinates:
+			if d.command_link == CommandData.LINK_IN_RANGE:
+				in_range += 1
+		rows.append(["Divisiones subordinadas", str(subordinates.size())])
+		rows.append(["Enlace", "%d en rango · %d fuera" % [in_range, subordinates.size() - in_range]])
+		for d in subordinates:
+			rows.append(["  " + d.display_name, CommandData.link_label(d.command_link)])
+		if c.is_general():
+			var commanders := 0
+			for other in state.all_commands():
+				if other.player_id == c.player_id and not other.is_general() and other.is_alive():
+					commanders += 1
+			rows.append(["Comandantes", str(commanders)])
+	var owner_text := "%s de %s" % [c.role_label(), state.player_name(c.player_id)]
+	hud.division_panel.show_info(c.display_name, owner_text, Palette.side_color(state.side_of(c.player_id)), rows)
+
+
+## Chain-of-command rows of an own division (hidden otherwise).
+func _refresh_command_rows(d: DivisionData) -> void:
+	var state := source.state
+	if not state.has_chain_of_command() or d.player_id != source.local_player_id:
+		hud.division_panel.set_command_info(false, "", "", "")
+		return
+	var command_text := "Directo al general"
+	var command := state.get_command(d.commander_id)
+	if command != null:
+		command_text = "%s (%s)" % [command.display_name, CommandData.status_label(command.status)]
+		if not command.is_active() and d.command_link != CommandData.LINK_NO_COMMAND:
+			command_text += " · órdenes vía general"
+	var pending_text := "Ninguna"
+	if d.pending_order != null:
+		pending_text = "%s · en camino con mensajero, ~%d s" % [
+			EventFormatter.describe_order(d.pending_order, state), ceili(state.ticks_to_seconds(d.pending_eta_ticks)),
+		]
+	hud.division_panel.set_command_info(true, command_text, CommandData.link_label(d.command_link), pending_text)
+
+
+func _toggle_command_radii() -> void:
+	command_layer.show_radii = not command_layer.show_radii
 
 
 func _process(_delta: float) -> void:

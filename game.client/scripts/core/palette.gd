@@ -61,6 +61,15 @@ const LOG_GOOD := Color(0.5, 0.95, 0.5)
 
 const PANEL_BG := Color(0.08, 0.09, 0.1, 0.88)
 
+# Chain of command
+const GENERAL_MARK := Color(1.0, 0.84, 0.25)
+const COMMAND_OUTLINE := Color(1, 1, 1, 0.9)
+const COMMAND_INACTIVE := Color(0.55, 0.55, 0.55)
+const LINK_OK := Color(0.45, 0.95, 0.5, 0.8)
+const LINK_FAR := Color(1.0, 0.6, 0.15, 0.9)
+const LINK_NONE := Color(0.6, 0.6, 0.6, 0.9)
+const MESSENGER := Color(1.0, 0.95, 0.75)
+
 
 static func side_color(side: int) -> Color:
 	return SIDE_COLORS[clampi(side, 0, SIDE_COLORS.size() - 1)]

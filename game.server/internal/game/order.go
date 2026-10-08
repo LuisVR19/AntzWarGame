@@ -19,6 +19,11 @@ type Order struct {
 	TargetDivisionID DivisionID
 	CreatedAt        time.Time
 	CreatedTick      int64
+	// Delivery tells whether the order is immediate or carried by a
+	// messenger (MessengerID, estimated ETATicks at acceptance).
+	Delivery    DeliveryMode
+	MessengerID MessengerID
+	ETATicks    int64
 }
 
 // OrderRequest is an order as requested by a client, before validation.
@@ -35,23 +40,28 @@ type OrderRequest struct {
 type ErrorCode string
 
 const (
-	CodeGameNotRunning    ErrorCode = "game_not_running"
-	CodeGameFull          ErrorCode = "game_full"
-	CodeInvalidState      ErrorCode = "invalid_state"
-	CodePlayerNotFound    ErrorCode = "player_not_found"
-	CodeInvalidOrderType  ErrorCode = "invalid_order_type"
-	CodeDivisionNotFound  ErrorCode = "division_not_found"
-	CodeNotOwner          ErrorCode = "not_owner"
-	CodeDivisionDestroyed ErrorCode = "division_destroyed"
-	CodeDivisionRouted    ErrorCode = "division_routed"
-	CodeDivisionEngaged   ErrorCode = "division_engaged"
-	CodeTargetRequired    ErrorCode = "target_required"
-	CodeTargetNotFound    ErrorCode = "target_not_found"
-	CodeTargetFriendly    ErrorCode = "target_friendly"
-	CodeTargetDestroyed   ErrorCode = "target_destroyed"
-	CodeInvalidPosition   ErrorCode = "invalid_position"
-	CodeImpassable        ErrorCode = "impassable_position"
-	CodeUnreachable       ErrorCode = "unreachable_position"
+	CodeGameNotRunning      ErrorCode = "game_not_running"
+	CodeGameFull            ErrorCode = "game_full"
+	CodeInvalidState        ErrorCode = "invalid_state"
+	CodePlayerNotFound      ErrorCode = "player_not_found"
+	CodeInvalidOrderType    ErrorCode = "invalid_order_type"
+	CodeDivisionNotFound    ErrorCode = "division_not_found"
+	CodeNotOwner            ErrorCode = "not_owner"
+	CodeDivisionDestroyed   ErrorCode = "division_destroyed"
+	CodeDivisionRouted      ErrorCode = "division_routed"
+	CodeDivisionEngaged     ErrorCode = "division_engaged"
+	CodeTargetRequired      ErrorCode = "target_required"
+	CodeTargetNotFound      ErrorCode = "target_not_found"
+	CodeTargetFriendly      ErrorCode = "target_friendly"
+	CodeTargetDestroyed     ErrorCode = "target_destroyed"
+	CodeInvalidPosition     ErrorCode = "invalid_position"
+	CodeImpassable          ErrorCode = "impassable_position"
+	CodeUnreachable         ErrorCode = "unreachable_position"
+	CodeNoCommand           ErrorCode = "no_command"
+	CodeCommanderNotFound   ErrorCode = "commander_not_found"
+	CodeCommanderInactive   ErrorCode = "commander_inactive"
+	CodeInvalidAssignment   ErrorCode = "invalid_assignment"
+	CodeCommanderOutOfRange ErrorCode = "commander_out_of_range"
 )
 
 // Error is a domain error with a client-facing code.
@@ -162,13 +172,29 @@ func (g *Game) validatePath(d *Division, target Position) ([]Position, error) {
 	return path, nil
 }
 
-// SubmitOrder validates a request and queues it; it takes effect during the
-// next tick (step 1, "process orders"). If several orders are queued for the
-// same division in one tick, the last one wins.
+// SubmitOrder validates a request and routes it through the chain of
+// command (command.go). An immediate order takes effect during the next tick
+// (step 1, "process orders"); if several are queued for the same division in
+// one tick, the last one wins. Otherwise a messenger carries it, replacing
+// any message already in transit to that division; an identical request
+// returns the order already in transit instead of sending another messenger.
 func (g *Game) SubmitOrder(req OrderRequest) (*Order, error) {
 	path, err := g.ValidateOrder(req)
 	if err != nil {
 		return nil, err
+	}
+	d := g.divisions[req.DivisionID]
+	immediate, src, err := g.routeOrder(d)
+	if err != nil {
+		return nil, err
+	}
+	pendingMsg := g.pendingMessenger(d.ID)
+	if !immediate && pendingMsg != nil && sameRequest(pendingMsg.Order, req, d) {
+		pendingMsg.Order.ETATicks = pendingMsg.ETATicks
+		return pendingMsg.Order, nil
+	}
+	if pendingMsg != nil {
+		g.endMessenger(pendingMsg, MessageCancelled, "superseded")
 	}
 	g.orderSeq++
 	o := &Order{
@@ -191,6 +217,11 @@ func (g *Game) SubmitOrder(req OrderRequest) (*Order, error) {
 	if req.Type != OrderAttack {
 		o.TargetDivisionID = ""
 	}
+	if !immediate {
+		g.dispatch(src, d, o)
+		return o, nil
+	}
+	o.Delivery = DeliveryImmediate
 	g.pending = append(g.pending, pendingOrder{order: o, path: path})
 	return o, nil
 }

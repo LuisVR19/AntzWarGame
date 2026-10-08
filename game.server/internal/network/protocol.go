@@ -18,6 +18,7 @@ const (
 	MsgDefendDivision  = "defend_division"
 	MsgRetreatDivision = "retreat_division"
 	MsgHoldDivision    = "hold_division"
+	MsgAssignCommander = "assign_commander"
 )
 
 // Server -> client.
@@ -34,6 +35,8 @@ const (
 	MsgBattleEnded       = "battle_ended"
 	MsgDivisionDestroyed = "division_destroyed"
 	MsgGameFinished      = "game_finished"
+	MsgCommandUpdated    = "command_updated"
+	MsgMessengerUpdated  = "messenger_updated"
 	MsgError             = "error"
 )
 
@@ -98,6 +101,14 @@ type RetreatDivisionRequest struct {
 	DivisionID string   `json:"division_id"`
 	X          *float64 `json:"x,omitempty"`
 	Y          *float64 `json:"y,omitempty"`
+}
+
+// AssignCommanderRequest puts a division under another command unit
+// (commander or general) of the same player.
+type AssignCommanderRequest struct {
+	Envelope
+	DivisionID  string `json:"division_id"`
+	CommanderID string `json:"commander_id"`
 }
 
 type HoldDivisionRequest struct {
@@ -171,6 +182,44 @@ type DivisionDTO struct {
 	Terrain      string        `json:"terrain"`
 	Order        *OrderDTO     `json:"order,omitempty"` // own divisions only
 	Path         []PositionDTO `json:"path,omitempty"`  // own divisions only
+	// Chain of command, own divisions only (absent without command units).
+	CommanderID  string           `json:"commander_id,omitempty"`
+	CommandLink  string           `json:"command_link,omitempty"` // in_range, out_of_range, no_command
+	PendingOrder *PendingOrderDTO `json:"pending_order,omitempty"`
+}
+
+// PendingOrderDTO is an order a messenger is carrying to a division.
+type PendingOrderDTO struct {
+	MessengerID string   `json:"messenger_id"`
+	ETATicks    int64    `json:"eta_ticks"`
+	Order       OrderDTO `json:"order"`
+}
+
+// CommandUnitDTO is a general or a commander. Its position is the position
+// of its host division.
+type CommandUnitDTO struct {
+	ID              string  `json:"id"`
+	PlayerID        string  `json:"player_id"`
+	Role            string  `json:"role"` // general, commander
+	Name            string  `json:"name"`
+	HostDivisionID  string  `json:"host_division_id"`
+	X               float64 `json:"x"`
+	Y               float64 `json:"y"`
+	Status          string  `json:"status"` // active, incapacitated, eliminated
+	CommRadius      float64 `json:"comm_radius"`
+	InfluenceRadius float64 `json:"influence_radius"`
+}
+
+// MessengerDTO is a message in transit (sent only to its owner).
+type MessengerDTO struct {
+	ID         string   `json:"id"`
+	SenderID   string   `json:"sender_id"`
+	DivisionID string   `json:"division_id"`
+	X          float64  `json:"x"`
+	Y          float64  `json:"y"`
+	SentTick   int64    `json:"sent_tick"`
+	ETATicks   int64    `json:"eta_ticks"`
+	Order      OrderDTO `json:"order"`
 }
 
 type BattleDTO struct {
@@ -208,6 +257,9 @@ type GameStateMessage struct {
 	CountdownTicks int           `json:"countdown_ticks,omitempty"`
 	Divisions      []DivisionDTO `json:"divisions"`
 	Battles        []BattleDTO   `json:"battles"`
+	// Chain of command (absent when no army has command units).
+	Commanders []CommandUnitDTO `json:"commanders,omitempty"`
+	Messengers []MessengerDTO   `json:"messengers,omitempty"`
 }
 
 // GameJoinedMessage is sent as game_created (creator) or game_joined.
@@ -243,6 +295,11 @@ type OrderAcceptedMessage struct {
 	RequestID  string   `json:"request_id,omitempty"`
 	DivisionID string   `json:"division_id"`
 	Order      OrderDTO `json:"order"`
+	// Delivery: "immediate" or "messenger" (then messenger_id and the
+	// estimated eta_ticks until the division receives it).
+	Delivery    string `json:"delivery"`
+	MessengerID string `json:"messenger_id,omitempty"`
+	ETATicks    int64  `json:"eta_ticks,omitempty"`
 }
 
 type DivisionUpdatedMessage struct {
@@ -287,6 +344,30 @@ type DivisionDestroyedMessage struct {
 	DivisionID string `json:"division_id"`
 	PlayerID   string `json:"player_id"`
 	BattleID   string `json:"battle_id,omitempty"`
+}
+
+// CommandUpdatedMessage: a general or commander changed status or was promoted.
+type CommandUpdatedMessage struct {
+	Type      string `json:"type"`
+	Tick      int64  `json:"tick"`
+	CommandID string `json:"command_id"`
+	PlayerID  string `json:"player_id"`
+	Role      string `json:"role"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason"` // host_routed, host_rallied, host_destroyed, promoted
+}
+
+// MessengerUpdatedMessage: a messenger was dispatched, delivered its order or
+// was cancelled (reason: dispatched, delivered, superseded,
+// recipient_destroyed, game_finished or the validation error code).
+type MessengerUpdatedMessage struct {
+	Type        string   `json:"type"`
+	Tick        int64    `json:"tick"`
+	MessengerID string   `json:"messenger_id"`
+	DivisionID  string   `json:"division_id"`
+	Status      string   `json:"status"` // pending, delivered, cancelled
+	Reason      string   `json:"reason"`
+	Order       OrderDTO `json:"order"`
 }
 
 type GameFinishedMessage struct {

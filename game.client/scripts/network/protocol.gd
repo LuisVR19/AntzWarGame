@@ -14,6 +14,8 @@ const ATTACK_DIVISION := "attack_division"
 const DEFEND_DIVISION := "defend_division"
 const RETREAT_DIVISION := "retreat_division"
 const HOLD_DIVISION := "hold_division"
+## Chain of command: put a division under another general/commander.
+const ASSIGN_COMMANDER := "assign_commander"
 ## Split / merge: local simulation only for now (not in game.server yet).
 const SPLIT_DIVISION := "split_division"
 const MERGE_DIVISION := "merge_division"
@@ -36,6 +38,9 @@ const DIVISIONS_MERGED := "divisions_merged"
 ## Ranged attack of archers (local simulation only).
 const VOLLEY := "volley"
 const GAME_FINISHED := "game_finished"
+## Chain of command (Go server only).
+const COMMAND_UPDATED := "command_updated"
+const MESSENGER_UPDATED := "messenger_updated"
 const ERROR := "error"
 
 
@@ -52,6 +57,10 @@ static func join_game(game_id: String, player_name: String, session_token := "")
 	if not session_token.is_empty():
 		msg["session_token"] = session_token
 	return msg
+
+
+static func assign_commander(division_id: String, commander_id: String) -> Dictionary:
+	return {"type": ASSIGN_COMMANDER, "division_id": division_id, "commander_id": commander_id}
 
 
 static func ready_message(is_ready: bool) -> Dictionary:

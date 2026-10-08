@@ -22,6 +22,7 @@ signal order_hotkey_pressed(order_type: String)
 signal debug_toggled
 signal switch_player_pressed
 signal formation_cycle_pressed
+signal command_radii_toggled
 
 ## Screen pixels the mouse must travel with the right button held to pan.
 var drag_threshold := 6.0
@@ -60,6 +61,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		switch_player_pressed.emit()
 	elif event.is_action_pressed(InputActions.CYCLE_FORMATION):
 		formation_cycle_pressed.emit()
+	elif event.is_action_pressed(InputActions.TOGGLE_COMMAND_RADII):
+		command_radii_toggled.emit()
 	else:
 		for action in InputActions.ORDER_HOTKEYS.keys():
 			if event.is_action_pressed(action):

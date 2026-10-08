@@ -17,6 +17,8 @@ const ORDER_RETREAT := "order_retreat"
 const ORDER_HOLD := "order_hold"
 const ORDER_SPLIT := "order_split"
 const ORDER_MERGE := "order_merge"
+const ORDER_ASSIGN := "order_assign"
+const TOGGLE_COMMAND_RADII := "toggle_command_radii"
 const CYCLE_FORMATION := "cycle_formation"
 const SELECT_ALL := "select_all"
 
@@ -29,6 +31,7 @@ const ORDER_HOTKEYS := {
 	ORDER_HOLD: "HOLD",
 	ORDER_SPLIT: "SPLIT",
 	ORDER_MERGE: "MERGE",
+	ORDER_ASSIGN: "ASSIGN",
 }
 
 
@@ -47,6 +50,8 @@ static func ensure() -> void:
 	_add(ORDER_HOLD, [KEY_5])
 	_add(ORDER_SPLIT, [KEY_6])
 	_add(ORDER_MERGE, [KEY_7])
+	_add(ORDER_ASSIGN, [KEY_8])
+	_add(TOGGLE_COMMAND_RADII, [KEY_C])
 	_add(CYCLE_FORMATION, [KEY_F])
 	if not InputMap.has_action(SELECT_ALL):  # Ctrl+A
 		InputMap.add_action(SELECT_ALL)

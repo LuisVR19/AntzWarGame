@@ -26,6 +26,12 @@ var facing := 0.0  # radians, world space
 var reforming := false
 var unit_type := UnitTypes.DEFAULT
 var radius := 0.0  # ground radius in world units (0 = unknown, e.g. Go server)
+## Chain of command (own divisions, Go server only; empty otherwise).
+var commander_id := ""  # "" = reports directly to the general
+var command_link := ""  # CommandData.LINK_*, "" = no chain of command
+var pending_order: Order = null  # carried by a messenger, not executed yet
+var pending_messenger_id := ""
+var pending_eta_ticks := 0
 
 
 static func from_protocol(raw: Dictionary) -> DivisionData:
@@ -59,6 +65,16 @@ static func from_protocol(raw: Dictionary) -> DivisionData:
 	if path_raw is Array:
 		for p in path_raw:
 			d.path.append(Protocol.vec_from(p))
+	d.commander_id = str(raw.get("commander_id", ""))
+	d.command_link = GameTypes.from_wire(str(raw.get("command_link", "")))
+	var pending_raw: Variant = raw.get("pending_order")
+	if pending_raw is Dictionary:
+		var pending_order_raw: Variant = pending_raw.get("order")
+		if pending_order_raw is Dictionary:
+			d.pending_order = Order.from_protocol(pending_order_raw)
+			d.pending_order.division_id = d.id
+		d.pending_messenger_id = str(pending_raw.get("messenger_id", ""))
+		d.pending_eta_ticks = int(pending_raw.get("eta_ticks", 0))
 	return d
 
 

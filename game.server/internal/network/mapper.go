@@ -43,6 +43,10 @@ func toOrder(o *game.OrderView) *OrderDTO {
 	return dto
 }
 
+func toOrderDTO(o *game.Order) OrderDTO {
+	return *toOrder(&game.OrderView{ID: o.ID, Type: o.Type, TargetPosition: o.TargetPosition, TargetDivisionID: o.TargetDivisionID})
+}
+
 func toDivision(d game.DivisionView) DivisionDTO {
 	dto := DivisionDTO{
 		ID: string(d.ID), PlayerID: string(d.PlayerID), Name: d.Name,
@@ -51,7 +55,11 @@ func toDivision(d game.DivisionView) DivisionDTO {
 		Attack: d.Attack, Defense: d.Defense, Speed: d.Speed,
 		Morale: round2(d.Morale), Experience: round2(d.Experience), Fatigue: round2(d.Fatigue),
 		State: wire(d.State), Routed: d.Routed, InBattle: d.InBattle, Terrain: wire(d.Terrain),
-		Order: toOrder(d.Order),
+		Order:       toOrder(d.Order),
+		CommanderID: string(d.CommanderID), CommandLink: wire(d.CommandLink),
+	}
+	if p := d.PendingOrder; p != nil {
+		dto.PendingOrder = &PendingOrderDTO{MessengerID: string(p.MessengerID), ETATicks: p.ETATicks, Order: *toOrder(&p.Order)}
 	}
 	for _, p := range d.Path {
 		dto.Path = append(dto.Path, toPosition(p))
@@ -78,6 +86,19 @@ func toGameState(v *game.GameView) GameStateMessage {
 	}
 	for _, d := range v.Divisions {
 		msg.Divisions = append(msg.Divisions, toDivision(d))
+	}
+	for _, u := range v.CommandUnits {
+		msg.Commanders = append(msg.Commanders, CommandUnitDTO{
+			ID: string(u.ID), PlayerID: string(u.PlayerID), Role: wire(u.Role), Name: u.Name,
+			HostDivisionID: string(u.HostDivisionID), X: u.Position.X, Y: u.Position.Y, Status: wire(u.Status),
+			CommRadius: u.CommRadius, InfluenceRadius: u.InfluenceRadius,
+		})
+	}
+	for _, m := range v.Messengers {
+		msg.Messengers = append(msg.Messengers, MessengerDTO{
+			ID: string(m.ID), SenderID: string(m.SenderID), DivisionID: string(m.DivisionID),
+			X: m.Position.X, Y: m.Position.Y, SentTick: m.SentTick, ETATicks: m.ETATicks, Order: *toOrder(&m.Order),
+		})
 	}
 	for _, b := range v.Battles {
 		msg.Battles = append(msg.Battles, BattleDTO{
@@ -148,6 +169,16 @@ func encodeEvent(out app.Output) any {
 		}
 	case game.DivisionDestroyed:
 		return DivisionDestroyedMessage{Type: MsgDivisionDestroyed, Tick: ev.At, DivisionID: string(ev.DivisionID), PlayerID: string(ev.PlayerID), BattleID: ev.BattleID}
+	case game.CommandUpdated:
+		return CommandUpdatedMessage{
+			Type: MsgCommandUpdated, Tick: ev.At, CommandID: string(ev.UnitID), PlayerID: string(ev.PlayerID),
+			Role: wire(ev.Role), Status: wire(ev.Status), Reason: ev.Reason,
+		}
+	case game.MessengerUpdated:
+		return MessengerUpdatedMessage{
+			Type: MsgMessengerUpdated, Tick: ev.At, MessengerID: string(ev.MessengerID), DivisionID: string(ev.DivisionID),
+			Status: wire(ev.Status), Reason: ev.Reason, Order: toOrderDTO(ev.Order),
+		}
 	case game.GameFinished:
 		result := "draw"
 		switch {

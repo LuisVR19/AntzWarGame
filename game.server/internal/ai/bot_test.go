@@ -46,6 +46,9 @@ func orders(t *testing.T, decs []Decision) map[game.DivisionID]game.OrderRequest
 	t.Helper()
 	out := map[game.DivisionID]game.OrderRequest{}
 	for _, d := range decs {
+		if d.Assign != nil {
+			continue
+		}
 		if d.Order.PlayerID != botID {
 			t.Fatalf("order for another player: %+v", d.Order)
 		}
@@ -311,5 +314,85 @@ func TestConfigValidate(t *testing.T) {
 	c.RecoverMorale = c.RetreatMorale - 1
 	if c.Validate() == nil {
 		t.Fatal("recover_morale < retreat_morale accepted")
+	}
+}
+
+func TestRespectsChainOfCommand(t *testing.T) {
+	enemy := division("e1", humanID, 500, 600)
+	enemy2 := division("e2", humanID, 600, 600)
+	enemy2.UnitCount = 600 // a clearly better target
+
+	// Out of range with an order: a non-urgent change would cost a messenger.
+	b := newBot()
+	far := attacking(division("d1", botID, 1000, 600), "e1")
+	far.CommandLink = game.LinkOutOfRange
+	if decs := b.Decide(running(10, far, enemy, enemy2)); len(decs) != 0 {
+		t.Fatalf("out-of-range division must keep its order: %+v", decs)
+	}
+	// In range, the same situation changes target.
+	b = newBot()
+	near := far
+	near.CommandLink = game.LinkInRange
+	if got := orders(t, b.Decide(running(10, near, enemy, enemy2))); got["d1"].TargetDivisionID != "e2" {
+		t.Fatalf("in-range division retargets: %+v", got)
+	}
+	// Urgent orders (retreat) still go out by messenger.
+	b = newBot()
+	weak := far
+	weak.UnitCount = 500
+	if got := orders(t, b.Decide(running(10, weak, enemy))); got["d1"].Type != game.OrderRetreat {
+		t.Fatalf("weak out-of-range division must still retreat: %+v", got)
+	}
+	// No command: nobody can transmit orders to it.
+	b = newBot()
+	lost := division("d1", botID, 1000, 600)
+	lost.CommandLink = game.LinkNoCommand
+	if decs := b.Decide(running(10, lost, enemy)); len(decs) != 0 {
+		t.Fatalf("division without command got orders: %+v", decs)
+	}
+	// An order carried by a messenger is not sent again.
+	b = newBot()
+	waiting := division("d1", botID, 1000, 600)
+	waiting.CommandLink = game.LinkOutOfRange
+	waiting.PendingOrder = &game.PendingOrderView{MessengerID: "messenger-1", Order: game.OrderView{Type: game.OrderAttack, TargetDivisionID: "e1"}, ETATicks: 80}
+	if decs := b.Decide(running(10, waiting, enemy)); len(decs) != 0 {
+		t.Fatalf("pending order repeated: %+v", decs)
+	}
+}
+
+func TestReassignsDivisionsOfEliminatedCommander(t *testing.T) {
+	b := newBot()
+	orphan := division("d1", botID, 1000, 600)
+	orphan.CommanderID = "commander-1"
+	units := []game.CommandUnitView{
+		{ID: "commander-1", PlayerID: botID, Role: game.RoleCommander, HostDivisionID: "dead", Status: game.CommandEliminated},
+		{ID: "commander-2", PlayerID: botID, Role: game.RoleCommander, HostDivisionID: "d2", Position: geom.V(1100, 600), Status: game.CommandActive, CommRadius: 350},
+		{ID: "commander-3", PlayerID: botID, Role: game.RoleCommander, HostDivisionID: "d3", Position: geom.V(1700, 600), Status: game.CommandActive, CommRadius: 350},
+		{ID: "commander-9", PlayerID: humanID, Role: game.RoleCommander, HostDivisionID: "e1", Position: geom.V(1000, 650), Status: game.CommandActive, CommRadius: 350},
+	}
+	v := running(10, orphan, division("d2", botID, 1100, 600), division("d3", botID, 1700, 600), division("e1", humanID, 300, 600))
+	v.CommandUnits = units
+	var assign *Assignment
+	for _, d := range b.Decide(v) {
+		if d.Assign != nil {
+			assign = d.Assign
+		}
+	}
+	if assign == nil || assign.DivisionID != "d1" || assign.CommanderID != "commander-2" {
+		t.Fatalf("orphan must go to the nearest own active commander: %+v", assign)
+	}
+	v.Tick = 20
+	for _, d := range b.Decide(v) {
+		if d.Assign != nil {
+			t.Fatal("reassignment repeated")
+		}
+	}
+	// No commander within range: nothing (it reports to the general).
+	b = newBot()
+	v.Divisions[0].Position = geom.V(300, 600)
+	for _, d := range b.Decide(v) {
+		if d.Assign != nil {
+			t.Fatalf("reassignment to an out-of-range commander: %+v", d.Assign)
+		}
 	}
 }

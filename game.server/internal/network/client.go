@@ -229,6 +229,14 @@ func (c *client) dispatch(data []byte) {
 			}
 			c.order(ctx, env, req)
 		}
+	case MsgAssignCommander:
+		var m AssignCommanderRequest
+		if c.decode(data, &m, env) && c.requireGame(env) {
+			req := app.AssignRequest{PlayerID: c.playerID, DivisionID: game.DivisionID(m.DivisionID), CommanderID: game.CommandUnitID(m.CommanderID)}
+			if err := c.room.AssignCommander(ctx, req); err != nil {
+				c.replyErr(env.RequestID, err)
+			}
+		}
 	case MsgHoldDivision:
 		var m HoldDivisionRequest
 		if c.decode(data, &m, env) && c.requireGame(env) {
@@ -351,10 +359,8 @@ func (c *client) order(ctx context.Context, env Envelope, req game.OrderRequest)
 		c.replyErr(env.RequestID, err)
 		return
 	}
-	dto := OrderDTO{ID: o.ID, Type: wire(o.Type), TargetDivisionID: string(o.TargetDivisionID)}
-	if o.TargetPosition != nil {
-		p := toPosition(*o.TargetPosition)
-		dto.TargetPosition = &p
-	}
-	c.enqueue(OrderAcceptedMessage{Type: MsgOrderAccepted, RequestID: env.RequestID, DivisionID: string(o.DivisionID), Order: dto})
+	c.enqueue(OrderAcceptedMessage{
+		Type: MsgOrderAccepted, RequestID: env.RequestID, DivisionID: string(o.DivisionID), Order: toOrderDTO(o),
+		Delivery: wire(o.Delivery), MessengerID: string(o.MessengerID), ETATicks: o.ETATicks,
+	})
 }

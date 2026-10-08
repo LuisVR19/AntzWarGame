@@ -25,7 +25,18 @@ static func format(event: GameEvent, state: BattleState) -> Dictionary:
 		"order_accepted":
 			var order := Order.from_protocol(data.get("order", {}))
 			var who := state.division_name(str(data.get("division_id", "")))
+			match str(data.get("delivery", "")):
+				"messenger":
+					var eta := ceili(state.ticks_to_seconds(int(data.get("eta_ticks", 0))))
+					return _entry("Orden de %s para %s enviada con mensajero (llega en ~%d s)" % [Order.label(order.type), who, eta],
+						Palette.LOG_INFO)
+				"immediate":
+					return _entry("%s recibió orden de %s (inmediata)" % [who, Order.label(order.type)], Palette.LOG_INFO)
 			return _entry("%s recibió orden de %s" % [who, Order.label(order.type)], Palette.LOG_INFO)
+		"messenger_updated":
+			return _messenger_update(data, state)
+		"command_updated":
+			return _command_update(data, state)
 		"division_updated":
 			return _division_update(data, state)
 		"battle_started":
@@ -125,6 +136,41 @@ static func _division_update(data: Dictionary, state: BattleState) -> Dictionary
 			return _entry("%s: la división con la que iba a unirse ya no existe" % who, Palette.LOG_INFO)
 		"merge_failed":
 			return _entry("%s no pudo unirse: una de las dos está en combate" % who, Palette.LOG_ERROR)
+	return {}
+
+
+static func _messenger_update(data: Dictionary, state: BattleState) -> Dictionary:
+	var who := state.division_name(str(data.get("division_id", "")))
+	var order := Order.from_protocol(data.get("order", {}))
+	var reason := str(data.get("reason", ""))
+	match str(data.get("status", "")):
+		"delivered":
+			return _entry("Mensajero: %s recibió la orden de %s" % [who, Order.label(order.type)], Palette.LOG_GOOD)
+		"cancelled":
+			match reason:
+				"superseded":
+					return _entry("Mensaje para %s anulado: lo sustituye una orden nueva" % who, Palette.LOG_INFO)
+				"recipient_destroyed":
+					return _entry("Mensaje perdido: %s ya no existe" % who, Palette.LOG_ERROR)
+				"game_finished":
+					return {}
+			return _entry("La orden de %s para %s ya no era válida al llegar (%s)" % [Order.label(order.type), who, reason],
+				Palette.LOG_ERROR)
+	return {}  # dispatched: order_accepted already said it
+
+
+static func _command_update(data: Dictionary, state: BattleState) -> Dictionary:
+	var player_id := str(data.get("player_id", ""))
+	var who := "%s (%s)" % [state.command_name(str(data.get("command_id", ""))), state.player_name(player_id)]
+	match str(data.get("reason", "")):
+		"host_destroyed":
+			return _entry("%s ha caído: sus divisiones pierden su mando" % who, Palette.LOG_ERROR)
+		"host_routed":
+			return _entry("%s queda incapacitado: su división se desbanda" % who, Palette.LOG_ERROR)
+		"host_rallied":
+			return _entry("%s recupera el mando" % who, Palette.LOG_GOOD)
+		"promoted":
+			return _entry("%s asume el mando del ejército como general" % who, Palette.LOG_GOOD)
 	return {}
 
 

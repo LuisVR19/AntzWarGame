@@ -271,3 +271,63 @@ func TestAIGameLobbyClosesWhenHumanLeaves(t *testing.T) {
 	r.Disconnect(human, sub)
 	<-r.Done()
 }
+
+// The bot's orders to a division out of its commander's range travel by
+// messenger exactly like a human's: they are not applied before delivery.
+func TestAIOrdersFollowTheChainOfCommand(t *testing.T) {
+	ctx := context.Background()
+	rules := game.DefaultRules()
+	rules.StartCountdownTicks = 2
+	r, logs := newAIRoom(t, rules)
+	bot, err := r.AddBot(ctx, "IA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := &recorder{}
+	human, err := r.Join(ctx, "alice", "", "", true, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Ready(ctx, human, true); err != nil {
+		t.Fatal(err)
+	}
+	// While STARTING, move the bot's 2nd Infantry far from Infantry Command.
+	var far game.DivisionID
+	_ = r.Inspect(ctx, func(g *game.Game) {
+		army, _ := g.Army(bot)
+		far = army.DivisionIDs[1]
+		d, _ := g.Division(far)
+		d.Position = game.Position{X: 1300, Y: 300}
+	})
+	var link game.CommandLink
+	var pending *game.Messenger
+	var order *game.Order
+	for i := 0; i < 10 && pending == nil; i++ {
+		if err := r.Step(ctx); err != nil {
+			t.Fatal(err)
+		}
+		_ = r.Inspect(ctx, func(g *game.Game) {
+			link = g.CommandLinkOf(far)
+			pending, _ = g.PendingOrder(far)
+			d, _ := g.Division(far)
+			order = d.CurrentOrder
+		})
+	}
+	if link != game.LinkOutOfRange || pending == nil {
+		t.Fatalf("the bot's order to an out-of-range division must travel by messenger (link=%s)", link)
+	}
+	if order != nil {
+		t.Fatal("the bot's order was applied before delivery")
+	}
+	eta := pending.ETATicks
+	for i := int64(0); i < eta+5; i++ {
+		_ = r.Step(ctx)
+	}
+	_ = r.Inspect(ctx, func(g *game.Game) { d, _ := g.Division(far); order = d.CurrentOrder })
+	if order == nil || order.PlayerID != bot {
+		t.Fatal("the bot's order must be applied after delivery")
+	}
+	if logs.count("ai order rejected") != 0 {
+		t.Fatal("rejected bot orders")
+	}
+}

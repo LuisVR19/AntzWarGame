@@ -36,6 +36,11 @@ func submit_order(order: Order) -> void:
 	_send(order.to_message())
 
 
+## Puts a division under another general/commander (chain of command).
+func assign_commander(division_id: String, commander_id: String) -> void:
+	_send(Protocol.assign_commander(division_id, commander_id))
+
+
 func set_ready(is_ready: bool) -> void:
 	_send(Protocol.ready_message(is_ready))
 
@@ -61,6 +66,11 @@ func supports_split_merge() -> bool:
 
 ## True if the source implements formations (the Go server does not yet).
 func supports_formations() -> bool:
+	return false
+
+
+## True if the source implements the chain of command (Go server only).
+func supports_command() -> bool:
 	return false
 
 
@@ -130,7 +140,11 @@ func _handle_message(msg: Dictionary) -> void:
 		game_event.emit(GameEvent.from_message(msg))
 		state_updated.emit(state)
 	elif type in [Protocol.ORDER_ACCEPTED, Protocol.BATTLE_STARTED, Protocol.BATTLE_UPDATED,
-			Protocol.BATTLE_ENDED, Protocol.DIVISION_DESTROYED, Protocol.VOLLEY]:
+			Protocol.BATTLE_ENDED, Protocol.DIVISION_DESTROYED, Protocol.VOLLEY, Protocol.MESSENGER_UPDATED]:
+		game_event.emit(GameEvent.from_message(msg))
+	elif type == Protocol.COMMAND_UPDATED:
+		state.set_command_status(str(msg.get("command_id", "")), GameTypes.from_wire(str(msg.get("status", ""))),
+			GameTypes.from_wire(str(msg.get("role", ""))))
 		game_event.emit(GameEvent.from_message(msg))
 	elif type == Protocol.GAME_FINISHED:
 		state.status = GameTypes.STATUS_FINISHED

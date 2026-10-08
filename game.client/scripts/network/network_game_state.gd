@@ -46,6 +46,10 @@ func source_name() -> String:
 	return "Servidor %s" % server_url
 
 
+func supports_command() -> bool:
+	return true
+
+
 func loading_text() -> String:
 	return "Creando partida contra la IA..." if vs_ai else "Conectando..."
 

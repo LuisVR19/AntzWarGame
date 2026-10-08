@@ -34,6 +34,8 @@ Más detalles en `docs/AVANCE.md` §10.
 | 1 2 3 4 5 | MOVER, ATACAR, DEFENDER, RETIRARSE, MANTENER |
 | 6 / 7 | DIVIDIR (en dos mitades) / UNIR (luego clic en otra división propia). Solo en partida local |
 | F | siguiente formación (también hay botones en el panel y en el menú de la división). Solo en partida local |
+| 8 / REASIGNAR MANDO | luego, clic en un general o comandante propio: la selección pasa a depender de él. Solo con el servidor Go |
+| C | muestra u oculta los radios de comunicación de tus mandos. Solo con el servidor Go |
 | Esc | cancelar la orden en curso, cerrar el menú o deseleccionar |
 | Rueda | zoom hacia el cursor |
 | WASD / flechas / ratón en el borde / botón central | desplazar la cámara |

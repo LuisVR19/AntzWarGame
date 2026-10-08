@@ -531,3 +531,42 @@ La IA vive **solo en el servidor Go** (`game.server/internal/ai`, ver su README,
 2. Prueba manual: `go run ./cmd/server`, "Jugar contra IA", "¡Listo!". El ejército rival debe avanzar solo, combatir, retirarse si queda débil y la partida debe terminar con el panel de resultado. Probar también con el servidor apagado (debe aparecer el aviso y poder volver al menú).
 3. Comprobar que "Conectar" (dos jugadores) sigue funcionando igual.
 
+
+## 20. Cadena de mando: general, comandantes y mensajeros (2026-10-08, sin Godot)
+
+Las reglas viven en el servidor (`game.server/internal/game/command.go`; ver su README, sección "Cadena de mando"). El cliente solo dibuja lo que recibe y envía `assign_commander`. La simulación local no tiene cadena de mando: los campos no llegan y la UI correspondiente queda oculta.
+
+**Datos:**
+- `CommandData`: un general o comandante.
+- `DivisionData` gana `commander_id`, `command_link`, `pending_order`, `pending_messenger_id` y `pending_eta_ticks`.
+- `BattleState` gana `commanders`/`commander_ids` y `messengers`, con los helpers `subordinates()`, `get_command()`, `set_command_status()` y `ticks_to_seconds()`.
+- `GameStateSource` gana `supports_command()` (true solo en `NetworkGameState`) y `assign_commander()`. También aplica `command_updated` al instante y pasa `messenger_updated` al registro.
+
+**Mapa (`scripts/battle/command_layer.gd`, creado por código en `BattleController._ready`):**
+- Marcadores sobre la división anfitriona: el general es una estrella dorada con un aro del color de su bando; cada comandante es un rombo del color de su bando; los incapacitados salen en gris con «!».
+- Al seleccionar un mando: se ven sus radios (comunicación como contorno, influencia como relleno) y líneas a sus subordinadas, verdes en rango y naranjas fuera.
+- Con [C] se ven los radios de comunicación de todos tus mandos.
+- Marcas en tus divisiones: un aro naranja abierto si están fuera de rango, una cruz gris si no tienen mando, y un sobre con los segundos que faltan si tienen una orden pendiente.
+- Los mensajeros son puntos con un sobre y una línea discontinua hasta su destinatario.
+
+**Panel:**
+- Al hacer clic en un marcador se selecciona el mando y se ve rol, estado, anfitriona, radios, subordinadas y el enlace de cada una.
+- En tus divisiones aparecen las filas «Mando», «Enlace» y «Orden pendiente».
+- Botón «REASIGNAR MANDO [8]»: se pulsa y luego se hace clic en un mando propio activo. El servidor solo lo acepta si la división está dentro del radio de comunicación de ese mando.
+- El panel del general lista también las divisiones sin comandante y las de comandantes caídos.
+- En modo ATACAR o UNIR, el clic sobre un marcador de mando cuenta como clic sobre su división.
+
+**Registro:** distingue la orden inmediata de la que sale con mensajero (con la ETA) e informa de la entrega, de la sustitución, de una orden que ya no es válida al llegar, de la caída o incapacitación de un mando y de la sucesión.
+
+**Verificado sin Godot:** `gdparse` de todos los `.gd` y `gdlint` de los archivos tocados, sin avisos nuevos.
+
+**Pendiente en la máquina con Godot:**
+1. Registrar las clases, porque hay una clase global nueva (`CommandData`) y otra nueva (`CommandLayer`): `godot --headless --path . --editor --quit`.
+2. Ejecutar todos los tests, con los nuevos `tests/unit/test_command_chain.gd` y `tests/integration/test_command_flow.gd`.
+3. Partida manual contra la IA. Comprobar que:
+   - se ven los marcadores;
+   - una división alejada de su comandante muestra el aro naranja y su orden sale con mensajero (sobre con ETA y punto que viaja);
+   - el registro diferencia inmediata y mensajero;
+   - al caer un comandante, «REASIGNAR MANDO» funciona.
+4. Revisar a ojo los tamaños y desplazamientos de los marcadores (`CommandLayer.MARKER_OFFSET`, `MARK_OFFSET`) con los sprites reales.
+

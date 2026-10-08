@@ -133,7 +133,7 @@ func (g *Game) combatant(d *Division) combat.Combatant {
 		UnitCount:  d.UnitCount,
 		Attack:     d.Attack,
 		Defense:    d.Defense,
-		Morale:     d.Morale,
+		Morale:     g.combatMorale(d), // leadership bonus, not stored
 		Experience: d.Experience,
 		Fatigue:    d.Fatigue,
 		Terrain:    g.Map.ModifiersAt(d.Position),

@@ -48,7 +48,9 @@
         "defense": 12,
         "speed": 30,
         "morale": 80,
-        "experience": 10
+        "experience": 10,
+        "leads": "Infantry Command",
+        "commander": "Infantry Command"
       },
       {
         "name": "2nd Infantry",
@@ -61,7 +63,8 @@
         "defense": 12,
         "speed": 30,
         "morale": 80,
-        "experience": 10
+        "experience": 10,
+        "commander": "Infantry Command"
       },
       {
         "name": "1st Armored",
@@ -74,7 +77,8 @@
         "defense": 8,
         "speed": 45,
         "morale": 85,
-        "experience": 20
+        "experience": 20,
+        "leads": "general"
       }
     ],
     "combat": {
@@ -89,6 +93,18 @@
       "attacking_attack_bonus": 1.1,
       "retreating_attack_factor": 0.5,
       "retreating_defense_factor": 0.7
+    },
+    "command": {
+      "general_comm_radius": 450,
+      "general_influence_radius": 450,
+      "commander_comm_radius": 350,
+      "commander_influence_radius": 350,
+      "general_relay": false,
+      "messenger_speed": 120,
+      "messenger_delivery_range": 25,
+      "leadership_morale_bonus": 10,
+      "leadership_recovery_factor": 1.5,
+      "succession_delay_ticks": 100
     }
   },
   "terrain": {

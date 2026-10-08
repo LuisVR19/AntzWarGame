@@ -15,10 +15,18 @@ import (
 // a target this far away scores half as much as an adjacent one.
 const distanceScale = 1000.0
 
-// Decision is an order chosen by the bot and the main reason behind it.
+// Decision is an order (or, when Assign is set, a change of commander)
+// chosen by the bot and the main reason behind it.
 type Decision struct {
 	Order  game.OrderRequest
+	Assign *Assignment
 	Reason string
+}
+
+// Assignment puts a division under another command unit.
+type Assignment struct {
+	DivisionID  game.DivisionID
+	CommanderID game.CommandUnitID
 }
 
 // Bot is a deterministic rule-based player:
@@ -32,8 +40,14 @@ type Decision struct {
 //     closer to the base or hold their position
 //
 // It only reads the GameView of its own player, so it knows exactly what a
-// human in its place would know. Orders already being executed, or sent
-// recently, are not repeated.
+// human in its place would know. Orders already being executed, carried by a
+// messenger or sent recently are not repeated.
+//
+// Chain of command: its orders go through the same SubmitOrder as a human's,
+// so out-of-range divisions get them by messenger. It does not order
+// divisions without command, only changes the orders of out-of-range
+// divisions for urgent reasons (retreat, defense of the base) and puts the
+// divisions of an eliminated commander under the nearest active commander.
 //
 // A Bot is not safe for concurrent use; the Room goroutine owns it.
 type Bot struct {
@@ -48,6 +62,8 @@ type Bot struct {
 	// recovering marks divisions that retreated for low morale and must
 	// reach cfg.RecoverMorale before fighting again.
 	recovering map[game.DivisionID]bool
+	// reassigned divisions already got a new commander from the bot.
+	reassigned map[game.DivisionID]bool
 	defending  bool
 }
 
@@ -66,6 +82,7 @@ func New(id player.ID, base game.Position, cfg Config, log *slog.Logger) *Bot {
 		lastDecision: -1,
 		issued:       make(map[game.DivisionID]issuedOrder),
 		recovering:   make(map[game.DivisionID]bool),
+		reassigned:   make(map[game.DivisionID]bool),
 	}
 }
 
@@ -112,10 +129,14 @@ func (b *Bot) Decide(v game.GameView) []Decision {
 		count: make(map[game.DivisionID]int),
 	}
 
+	b.reassignOrphans(p, own, v.CommandUnits)
+
 	// 1. Weak divisions withdraw; routed and engaged ones are left alone.
 	var available []game.DivisionView
 	for _, d := range own {
 		switch {
+		case d.CommandLink == game.LinkNoCommand:
+			// Nobody can transmit orders to it: it keeps its last order.
 		case d.Routed:
 			// Routed divisions retreat on their own and only accept RETREAT.
 		case b.weak(d):
@@ -144,7 +165,7 @@ func (b *Bot) Decide(v game.GameView) []Decision {
 				break
 			}
 			if !p.busy[d.ID] {
-				b.attack(p, d, t, fmt.Sprintf("defend base: %s is %.0f from the base", t.ID, t.Position.Dist(b.base)))
+				b.attack(p, d, t, true, fmt.Sprintf("defend base: %s is %.0f from the base", t.ID, t.Position.Dist(b.base)))
 			}
 		}
 		if p.sent[t.ID] >= need {
@@ -194,13 +215,13 @@ func (b *Bot) withdraw(p *plan, d game.DivisionView) {
 	retreated = retreated && last.req.Type == game.OrderRetreat && d.Order == nil
 	switch {
 	case d.InBattle:
-		b.propose(p, d, game.OrderRequest{Type: game.OrderRetreat}, reason+": disengage and retreat to base")
+		b.propose(p, d, game.OrderRequest{Type: game.OrderRetreat}, true, reason+": disengage and retreat to base")
 	case d.Order != nil && d.Order.Type == game.OrderRetreat:
 		p.busy[d.ID] = true // already on its way
 	case retreated || d.Position.Dist(b.base) <= b.cfg.HomeRadius:
-		b.propose(p, d, game.OrderRequest{Type: game.OrderDefend}, reason+": guard the base")
+		b.propose(p, d, game.OrderRequest{Type: game.OrderDefend}, true, reason+": guard the base")
 	default:
-		b.propose(p, d, game.OrderRequest{Type: game.OrderRetreat}, reason+": retreat to base")
+		b.propose(p, d, game.OrderRequest{Type: game.OrderRetreat}, true, reason+": retreat to base")
 	}
 }
 
@@ -222,7 +243,7 @@ func (b *Bot) engage(p *plan, d game.DivisionView, own, enemies []game.DivisionV
 	t, ok := b.pickTarget(p, d, enemies)
 	if !ok {
 		if d.Order == nil {
-			b.propose(p, d, game.OrderRequest{Type: game.OrderDefend}, "no visible enemy: hold position")
+			b.propose(p, d, game.OrderRequest{Type: game.OrderDefend}, false, "no visible enemy: hold position")
 		}
 		p.busy[d.ID] = true
 		return
@@ -257,13 +278,13 @@ func (b *Bot) engage(p *plan, d game.DivisionView, own, enemies []game.DivisionV
 		if nearby > 0 {
 			reason += fmt.Sprintf(", %d allies nearby", nearby)
 		}
-		b.attack(p, d, t, reason)
+		b.attack(p, d, t, false, reason)
 	case rally != nil && rally.Position.Dist(d.Position) > b.cfg.RegroupRadius:
 		pos := rally.Position
-		b.propose(p, d, game.OrderRequest{Type: game.OrderMove, TargetPosition: &pos},
+		b.propose(p, d, game.OrderRequest{Type: game.OrderMove, TargetPosition: &pos}, false,
 			fmt.Sprintf("regroup with %s: odds %.2f against %s", rally.ID, odds, t.ID))
 	default:
-		b.propose(p, d, game.OrderRequest{Type: game.OrderDefend},
+		b.propose(p, d, game.OrderRequest{Type: game.OrderDefend}, false,
 			fmt.Sprintf("outmatched by %s (odds %.2f): hold position", t.ID, odds))
 	}
 }
@@ -307,18 +328,24 @@ func (b *Bot) score(p *plan, d, e game.DivisionView) float64 {
 	return odds / (1 + d.Position.Dist(e.Position)/distanceScale)
 }
 
-func (b *Bot) attack(p *plan, d, t game.DivisionView, reason string) {
+func (b *Bot) attack(p *plan, d, t game.DivisionView, urgent bool, reason string) {
 	p.sent[t.ID] += power(d)
 	p.count[t.ID]++
-	b.propose(p, d, game.OrderRequest{Type: game.OrderAttack, TargetDivisionID: t.ID}, reason)
+	b.propose(p, d, game.OrderRequest{Type: game.OrderAttack, TargetDivisionID: t.ID}, urgent, reason)
 }
 
 // propose gives d a role and emits req unless the division is already
-// executing it or it was sent less than cfg.ReissueCooldownTicks ago.
-func (b *Bot) propose(p *plan, d game.DivisionView, req game.OrderRequest, reason string) {
+// executing it (or a messenger carries it), it was sent less than
+// cfg.ReissueCooldownTicks ago, or the division is out of command range and
+// already has an order while the change is not urgent: changing it would
+// cost a messenger ride.
+func (b *Bot) propose(p *plan, d game.DivisionView, req game.OrderRequest, urgent bool, reason string) {
 	p.busy[d.ID] = true
 	req.PlayerID, req.DivisionID = b.id, d.ID
 	if b.executing(d, req) {
+		return
+	}
+	if !urgent && d.CommandLink == game.LinkOutOfRange && (d.Order != nil || d.PendingOrder != nil) {
 		return
 	}
 	if last, ok := b.issued[d.ID]; ok && b.sameOrder(last.req, req) && p.tick-last.tick < int64(b.cfg.ReissueCooldownTicks) {
@@ -328,9 +355,16 @@ func (b *Bot) propose(p *plan, d game.DivisionView, req game.OrderRequest, reaso
 	p.decisions = append(p.decisions, Decision{Order: req, Reason: reason})
 }
 
-// executing reports whether the division's current order already is req.
+// executing reports whether the division's current order, or the order a
+// messenger is carrying to it, already is req.
 func (b *Bot) executing(d game.DivisionView, req game.OrderRequest) bool {
-	o := d.Order
+	if d.PendingOrder != nil {
+		return b.sameView(&d.PendingOrder.Order, req)
+	}
+	return b.sameView(d.Order, req)
+}
+
+func (b *Bot) sameView(o *game.OrderView, req game.OrderRequest) bool {
 	if o == nil || o.Type != req.Type {
 		return false
 	}
@@ -354,7 +388,52 @@ func (b *Bot) sameOrder(a, c game.OrderRequest) bool {
 	return a.TargetPosition.Dist(*c.TargetPosition) <= b.cfg.MoveTolerance
 }
 
+// reassignOrphans puts the divisions of an eliminated commander under the
+// nearest active commander that has them within its comm radius (the game
+// requires it). Otherwise they keep reporting to the general, which the
+// game does on its own, and the bot tries again in later evaluations.
+func (b *Bot) reassignOrphans(p *plan, own []game.DivisionView, units []game.CommandUnitView) {
+	status := map[game.CommandUnitID]game.CommandStatus{}
+	hosts := map[game.DivisionID]bool{}
+	for _, u := range units {
+		status[u.ID] = u.Status
+		if u.Status != game.CommandEliminated {
+			hosts[u.HostDivisionID] = true
+		}
+	}
+	for _, d := range own {
+		if d.CommanderID == "" || status[d.CommanderID] != game.CommandEliminated || hosts[d.ID] || b.reassigned[d.ID] {
+			continue
+		}
+		var best *game.CommandUnitView
+		for i := range units {
+			u := &units[i]
+			if u.PlayerID == b.id && u.Role == game.RoleCommander && u.Status == game.CommandActive &&
+				u.Position.Dist(d.Position) <= u.CommRadius &&
+				(best == nil || u.Position.Dist(d.Position) < best.Position.Dist(d.Position)) {
+				best = u
+			}
+		}
+		if best == nil {
+			continue
+		}
+		b.reassigned[d.ID] = true
+		p.decisions = append(p.decisions, Decision{
+			Assign: &Assignment{DivisionID: d.ID, CommanderID: best.ID},
+			Reason: fmt.Sprintf("commander %s eliminated: report to %s (%.0f away)", d.CommanderID, best.ID, best.Position.Dist(d.Position)),
+		})
+	}
+}
+
+// AssignmentRejected lets the bot try to reassign the division again.
+func (b *Bot) AssignmentRejected(id game.DivisionID) { delete(b.reassigned, id) }
+
 func (b *Bot) logDecision(tick int64, dec Decision) {
+	if a := dec.Assign; a != nil {
+		b.log.Info("ai decision", "tick", tick, "player_id", b.id, "division_id", a.DivisionID, "action", "ASSIGN_COMMANDER",
+			"commander_id", a.CommanderID, "reason", dec.Reason)
+		return
+	}
 	o := dec.Order
 	attrs := []any{"tick", tick, "player_id", b.id, "division_id", o.DivisionID, "action", o.Type, "reason", dec.Reason}
 	if o.TargetDivisionID != "" {

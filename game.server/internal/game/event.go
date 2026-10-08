@@ -15,6 +15,8 @@ const (
 	EventBattleEnded       EventType = "battle_ended"
 	EventDivisionDestroyed EventType = "division_destroyed"
 	EventGameFinished      EventType = "game_finished"
+	EventCommandUpdated    EventType = "command_updated"
+	EventMessengerUpdated  EventType = "messenger_updated"
 )
 
 // GameEvent is something notable that happened during a tick. Events are
@@ -89,6 +91,34 @@ type GameFinished struct {
 	WinnerID player.ID // empty on draw
 	Reason   string
 }
+
+// CommandUpdated is emitted when a general or commander changes status
+// (incapacitated, eliminated, recovered) or is promoted to general.
+type CommandUpdated struct {
+	At       int64
+	UnitID   CommandUnitID
+	PlayerID player.ID
+	Role     CommandRole
+	Status   CommandStatus
+	Reason   string
+}
+
+// MessengerUpdated is emitted when a messenger is dispatched, delivers its
+// order or is cancelled (Reason says why). Only its owner receives it.
+type MessengerUpdated struct {
+	At          int64
+	MessengerID MessengerID
+	PlayerID    player.ID
+	DivisionID  DivisionID
+	Status      MessengerStatus
+	Reason      string
+	Order       *Order
+}
+
+func (e CommandUpdated) Type() EventType   { return EventCommandUpdated }
+func (e MessengerUpdated) Type() EventType { return EventMessengerUpdated }
+func (e CommandUpdated) Tick() int64       { return e.At }
+func (e MessengerUpdated) Tick() int64     { return e.At }
 
 func (e GameStarted) Type() EventType       { return EventGameStarted }
 func (e DivisionUpdated) Type() EventType   { return EventDivisionUpdated }

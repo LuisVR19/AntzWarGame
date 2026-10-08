@@ -14,8 +14,9 @@ import (
 //  3. detect encounters
 //  4. update battles
 //  5. update morale / fatigue
-//  6. check victory conditions
-//  7. emit events
+//  6. chain of command (command units, succession) and messengers
+//  7. check victory conditions
+//  8. emit events
 func (g *Game) Tick() []GameEvent {
 	switch g.Status {
 	case StatusStarting:
@@ -40,6 +41,8 @@ func (g *Game) Tick() []GameEvent {
 	g.detectEncounters()
 	g.updateBattles()
 	g.updateMoraleFatigue()
+	g.updateCommand()
+	g.updateMessengers()
 	g.checkVictory()
 	return g.DrainEvents()
 }
@@ -154,7 +157,11 @@ func (g *Game) updateMoraleFatigue() {
 		}
 		d.Fatigue = clamp(d.Fatigue, 0, 100)
 		if !engaged {
-			d.Morale = clamp(d.Morale+g.Rules.MoraleRecoveryPerSecond*dt, 0, g.Rules.MaxMorale)
+			rate := g.Rules.MoraleRecoveryPerSecond
+			if g.led(d) {
+				rate *= g.Rules.Command.LeadershipRecoveryFactor
+			}
+			d.Morale = clamp(d.Morale+rate*dt, 0, g.Rules.MaxMorale)
 		}
 		if d.Routed && d.Morale >= g.Rules.RallyMoraleThreshold {
 			d.Routed = false

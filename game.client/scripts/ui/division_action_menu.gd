@@ -53,6 +53,11 @@ func set_split_merge_available(available: bool) -> void:
 		_buttons[order_type].visible = available
 
 
+func set_command_available(available: bool) -> void:
+	for order_type in DivisionPanel.COMMAND_ONLY:
+		_buttons[order_type].visible = available
+
+
 func open(title: String, screen_point: Vector2) -> void:
 	_title.text = title
 	show()

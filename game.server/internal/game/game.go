@@ -36,12 +36,16 @@ type Game struct {
 	divisionOrder []*Division
 	battles       []*Battle
 	pending       []pendingOrder
-	events        []GameEvent
-	countdown     int
+	// Chain of command (command.go).
+	commandUnits map[CommandUnitID]*CommandUnit
+	commandOrder []*CommandUnit
+	messengers   []*Messenger
+	events       []GameEvent
+	countdown    int
 	// disconnectedAt holds the tick at which a player lost connection.
 	disconnectedAt map[player.ID]int64
 
-	playerSeq, divisionSeq, battleSeq, orderSeq int
+	playerSeq, divisionSeq, battleSeq, orderSeq, commandSeq, messengerSeq int
 
 	engine     combat.Engine
 	visibility VisibilityPolicy
@@ -77,6 +81,7 @@ func New(id string, m *terrain.Map, rules Rules, engine combat.Engine, opts ...O
 		players:        make(map[player.ID]*player.Player),
 		armies:         make(map[player.ID]*Army),
 		divisions:      make(map[DivisionID]*Division),
+		commandUnits:   make(map[CommandUnitID]*CommandUnit),
 		disconnectedAt: make(map[player.ID]int64),
 		engine:         engine,
 		visibility:     FullVisibility{},
@@ -292,6 +297,7 @@ func (g *Game) deployArmies() {
 	for _, pid := range g.playerOrder {
 		p := g.players[pid]
 		army := &Army{PlayerID: pid}
+		divs := make([]*Division, 0, len(g.Rules.Army))
 		for _, t := range g.Rules.Army {
 			g.divisionSeq++
 			pos := spawnPosition(g.Map, p.Side, t)
@@ -313,7 +319,9 @@ func (g *Game) deployArmies() {
 			g.divisions[d.ID] = d
 			g.divisionOrder = append(g.divisionOrder, d)
 			army.DivisionIDs = append(army.DivisionIDs, d.ID)
+			divs = append(divs, d)
 		}
+		g.deployCommand(army, divs)
 		g.armies[pid] = army
 	}
 }
@@ -327,6 +335,9 @@ func (g *Game) finish(winner player.ID, reason string) {
 	g.FinishReason = reason
 	g.FinishedAt = g.now()
 	g.pending = nil
+	for _, m := range append([]*Messenger(nil), g.messengers...) {
+		g.endMessenger(m, MessageCancelled, "game_finished")
+	}
 	g.emit(GameFinished{At: g.CurrentTick, WinnerID: winner, Reason: reason})
 	g.log.Info("game finished", "game_id", g.ID, "winner", winner, "reason", reason, "tick", g.CurrentTick)
 }

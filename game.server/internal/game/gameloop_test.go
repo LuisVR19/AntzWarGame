@@ -24,7 +24,10 @@ func playScripted(t *testing.T) (*testGame, []GameEvent) {
 		}
 		if i%20 == 0 {
 			for _, d := range tg.Divisions() {
-				if d.PlayerID != tg.p1 || !d.Alive() || d.Routed || d.CurrentOrder != nil || tg.engaged(d.ID) {
+				// Divisions left without any command (no commander, general nor
+				// successor) cannot receive orders: they keep their last one.
+				if d.PlayerID != tg.p1 || !d.Alive() || d.Routed || d.CurrentOrder != nil || tg.engaged(d.ID) ||
+					tg.CommandLinkOf(d.ID) == LinkNoCommand {
 					continue
 				}
 				if target := nearestEnemy(tg, d); target != nil {

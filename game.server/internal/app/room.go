@@ -241,6 +241,8 @@ func (r *Room) Ready(ctx context.Context, pid player.ID, ready bool) error {
 func (r *Room) SubmitOrder(ctx context.Context, req game.OrderRequest) (*game.Order, error) {
 	var o *game.Order
 	var err error
+	// Events it produces (messenger dispatched/cancelled) go out with the
+	// next tick, after the order_accepted reply.
 	if e := r.exec(ctx, func() { o, err = r.g.SubmitOrder(req) }); e != nil {
 		return nil, e
 	}
@@ -248,8 +250,30 @@ func (r *Room) SubmitOrder(ctx context.Context, req game.OrderRequest) (*game.Or
 		r.log.Info("order rejected", "player_id", req.PlayerID, "division_id", req.DivisionID, "type", req.Type, "code", game.CodeOf(err))
 		return nil, err
 	}
-	r.log.Info("order accepted", "player_id", req.PlayerID, "order_id", o.ID, "division_id", req.DivisionID, "type", req.Type)
+	r.log.Info("order accepted", "player_id", req.PlayerID, "order_id", o.ID, "division_id", req.DivisionID, "type", req.Type, "delivery", o.Delivery)
 	return o, nil
+}
+
+// AssignRequest moves a division under another command unit.
+type AssignRequest struct {
+	PlayerID    player.ID
+	DivisionID  game.DivisionID
+	CommanderID game.CommandUnitID
+}
+
+// AssignCommander validates and applies a change of commander. It is
+// immediate; the resulting division_updated goes out with the next tick.
+func (r *Room) AssignCommander(ctx context.Context, req AssignRequest) error {
+	var err error
+	if e := r.exec(ctx, func() {
+		err = r.g.AssignCommander(req.PlayerID, req.DivisionID, req.CommanderID)
+	}); e != nil {
+		return e
+	}
+	if err != nil {
+		r.log.Info("assignment rejected", "player_id", req.PlayerID, "division_id", req.DivisionID, "commander_id", req.CommanderID, "code", game.CodeOf(err))
+	}
+	return err
 }
 
 // Disconnect is called by the network when a player's connection drops.
@@ -328,6 +352,13 @@ func (r *Room) driveBot() {
 		return
 	}
 	for _, dec := range r.bot.Decide(r.g.ViewFor(r.bot.PlayerID())) {
+		if a := dec.Assign; a != nil {
+			if err := r.g.AssignCommander(r.bot.PlayerID(), a.DivisionID, a.CommanderID); err != nil {
+				r.log.Warn("ai assignment rejected", "player_id", r.bot.PlayerID(), "division_id", a.DivisionID, "code", game.CodeOf(err))
+				r.bot.AssignmentRejected(a.DivisionID)
+			}
+			continue
+		}
 		if _, err := r.g.SubmitOrder(dec.Order); err != nil {
 			r.log.Warn("ai order rejected", "player_id", dec.Order.PlayerID, "division_id", dec.Order.DivisionID,
 				"type", dec.Order.Type, "code", game.CodeOf(err), "err", err)

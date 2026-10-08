@@ -48,9 +48,44 @@ type DivisionView struct {
 	Routed       bool
 	InBattle     bool
 	Terrain      terrain.Type
-	// Owner-only information (nil for opponents).
-	Order *OrderView
-	Path  []Position
+	// Owner-only information (nil/empty for opponents).
+	Order        *OrderView
+	Path         []Position
+	CommanderID  CommandUnitID
+	CommandLink  CommandLink
+	PendingOrder *PendingOrderView
+}
+
+// PendingOrderView is an order a messenger is carrying to a division.
+type PendingOrderView struct {
+	MessengerID MessengerID
+	Order       OrderView
+	ETATicks    int64
+}
+
+// CommandUnitView is the public representation of a general or commander.
+type CommandUnitView struct {
+	ID              CommandUnitID
+	PlayerID        player.ID
+	Role            CommandRole
+	Name            string
+	HostDivisionID  DivisionID
+	Position        Position
+	Status          CommandStatus
+	CommRadius      float64
+	InfluenceRadius float64
+}
+
+// MessengerView is a message in transit (owner only).
+type MessengerView struct {
+	ID         MessengerID
+	PlayerID   player.ID
+	SenderID   CommandUnitID
+	DivisionID DivisionID
+	Order      OrderView
+	Position   Position
+	SentTick   int64
+	ETATicks   int64
 }
 
 // BattleView is the public representation of an active battle.
@@ -86,6 +121,8 @@ type GameView struct {
 	Players        []PlayerView
 	Divisions      []DivisionView
 	Battles        []BattleView
+	CommandUnits   []CommandUnitView
+	Messengers     []MessengerView
 	WinnerID       player.ID
 	FinishReason   string
 }
@@ -108,6 +145,22 @@ func (g *Game) ViewFor(viewer player.ID) GameView {
 	for _, d := range g.divisionOrder {
 		if dv, ok := g.DivisionViewFor(viewer, d.ID); ok {
 			v.Divisions = append(v.Divisions, dv)
+		}
+	}
+	for _, u := range g.commandOrder {
+		if g.battleVisible(viewer, u.HostDivisionID) {
+			v.CommandUnits = append(v.CommandUnits, CommandUnitView{
+				ID: u.ID, PlayerID: u.PlayerID, Role: u.Role, Name: u.Name, HostDivisionID: u.HostDivisionID,
+				Position: g.UnitPosition(u), Status: u.Status, CommRadius: u.CommRadius, InfluenceRadius: u.InfluenceRadius,
+			})
+		}
+	}
+	for _, m := range g.messengers {
+		if viewer == Spectator || viewer == m.PlayerID {
+			v.Messengers = append(v.Messengers, MessengerView{
+				ID: m.ID, PlayerID: m.PlayerID, SenderID: m.SenderID, DivisionID: m.DivisionID, Order: orderView(m.Order),
+				Position: m.Position, SentTick: m.SentTick, ETATicks: m.ETATicks,
+			})
 		}
 	}
 	for _, b := range g.battles {
@@ -137,11 +190,23 @@ func (g *Game) DivisionViewFor(viewer player.ID, id DivisionID) (DivisionView, b
 	}
 	if viewer == Spectator || viewer == d.PlayerID {
 		if o := d.CurrentOrder; o != nil {
-			dv.Order = &OrderView{ID: o.ID, Type: o.Type, TargetPosition: o.TargetPosition, TargetDivisionID: o.TargetDivisionID}
+			ov := orderView(o)
+			dv.Order = &ov
 		}
 		dv.Path = d.Path()
+		dv.CommanderID = d.CommanderID
+		if d.Alive() {
+			dv.CommandLink, _ = g.commandLink(d)
+		}
+		if m := g.pendingMessenger(d.ID); m != nil {
+			dv.PendingOrder = &PendingOrderView{MessengerID: m.ID, Order: orderView(m.Order), ETATicks: m.ETATicks}
+		}
 	}
 	return dv, true
+}
+
+func orderView(o *Order) OrderView {
+	return OrderView{ID: o.ID, Type: o.Type, TargetPosition: o.TargetPosition, TargetDivisionID: o.TargetDivisionID}
 }
 
 func (g *Game) canSee(viewer player.ID, d *Division) bool {
@@ -161,6 +226,10 @@ func (g *Game) battleVisible(viewer player.ID, ids ...DivisionID) bool {
 func (g *Game) EventVisibleTo(e GameEvent, viewer player.ID) bool {
 	switch ev := e.(type) {
 	case DivisionUpdated:
+		if ev.Reason == "commander_assigned" {
+			d, ok := g.divisions[ev.DivisionID]
+			return viewer == Spectator || (ok && d.PlayerID == viewer)
+		}
 		return g.battleVisible(viewer, ev.DivisionID)
 	case DivisionDestroyed:
 		return g.battleVisible(viewer, ev.DivisionID)
@@ -170,6 +239,11 @@ func (g *Game) EventVisibleTo(e GameEvent, viewer player.ID) bool {
 		return g.battleVisible(viewer, ev.Attacker.DivisionID, ev.Defender.DivisionID)
 	case BattleEnded:
 		return g.battleVisible(viewer, ev.AttackerID, ev.DefenderID)
+	case MessengerUpdated:
+		return viewer == Spectator || viewer == ev.PlayerID
+	case CommandUpdated:
+		u, ok := g.commandUnits[ev.UnitID]
+		return ok && g.battleVisible(viewer, u.HostDivisionID)
 	}
 	return true
 }

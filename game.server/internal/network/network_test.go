@@ -23,6 +23,11 @@ import (
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	return newTestServerWith(t, nil)
+}
+
+func newTestServerWith(t *testing.T, mutate func(*config.Config)) *httptest.Server {
+	t.Helper()
 	cfg := config.Default()
 	cfg.Game.TickRate = 50 // fast simulation for tests
 	cfg.Game.StartCountdownTicks = 2
@@ -32,6 +37,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cfg.Game.Army = []game.DivisionTemplate{
 		{Name: "Infantry", Offset: geom.V(0, -150), UnitCount: 3000, Attack: 10, Defense: 12, Speed: 30, Morale: 80},
 		{Name: "Armored", Offset: geom.V(700, -300), UnitCount: 2000, Attack: 16, Defense: 8, Speed: 45, Morale: 85},
+	}
+	if mutate != nil {
+		mutate(&cfg)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	m, err := terrain.DefaultMap(cfg.Terrain)
@@ -350,4 +358,124 @@ func TestWebSocketAIGame(t *testing.T) {
 	}
 	var bs BattleStartedMessage
 	c.waitFor(MsgBattleStarted, &bs)
+}
+
+// TestWebSocketChainOfCommand: command units in the state, an order that
+// travels by messenger, private messenger information and reassignment.
+func TestWebSocketChainOfCommand(t *testing.T) {
+	srv := newTestServerWith(t, func(cfg *config.Config) {
+		cfg.Game.Command.MessengerSpeed = 600 // the test server ticks in real time
+		cfg.Game.Army = []game.DivisionTemplate{
+			{Name: "Infantry", Offset: geom.V(0, -150), UnitCount: 3000, Attack: 10, Defense: 12, Speed: 30, Morale: 80, Leads: game.LeadsGeneral},
+			{Name: "Armored", Offset: geom.V(-80, 0), UnitCount: 2000, Attack: 16, Defense: 8, Speed: 45, Morale: 85,
+				Leads: "Armored Command", Commander: "Armored Command"},
+			// Reports to the general but starts far from it: orders go by messenger.
+			{Name: "Scout", Offset: geom.V(700, 300), UnitCount: 1000, Attack: 8, Defense: 8, Speed: 40, Morale: 80},
+		}
+	})
+	c1, c2 := dial(t, srv), dial(t, srv)
+	c1.send(map[string]any{"type": "create_game", "player_name": "Alice"})
+	var created GameJoinedMessage
+	c1.waitFor(MsgGameCreated, &created)
+	c2.send(map[string]any{"type": "join_game", "game_id": created.GameID, "player_name": "Bob"})
+	c2.waitFor(MsgGameJoined, nil)
+	c1.send(map[string]any{"type": "ready"})
+	c2.send(map[string]any{"type": "ready"})
+	var started GameStartedMessage
+	c1.waitFor(MsgGameStarted, &started)
+
+	if len(started.State.Commanders) != 4 {
+		t.Fatalf("expected a general and a commander per army: %+v", started.State.Commanders)
+	}
+	var scout, armored DivisionDTO
+	var armoredCmd CommandUnitDTO
+	for _, d := range started.State.Divisions {
+		if d.PlayerID != created.PlayerID {
+			if d.CommandLink != "" || d.CommanderID != "" {
+				t.Fatalf("enemy command details leaked: %+v", d)
+			}
+			continue
+		}
+		switch d.Name {
+		case "Scout":
+			scout = d
+		case "Armored":
+			armored = d
+		}
+	}
+	for _, u := range started.State.Commanders {
+		if u.PlayerID == created.PlayerID && u.Role == "commander" {
+			armoredCmd = u
+		}
+	}
+	if scout.CommandLink != "out_of_range" || armored.CommandLink != "in_range" || armored.CommanderID != armoredCmd.ID {
+		t.Fatalf("links: scout=%+v armored=%+v", scout, armored)
+	}
+	if armoredCmd.Status != "active" || armoredCmd.HostDivisionID != armored.ID || armoredCmd.CommRadius <= 0 {
+		t.Fatalf("commander: %+v", armoredCmd)
+	}
+
+	c1.send(map[string]any{"type": "hold_division", "request_id": "h1", "division_id": scout.ID})
+	var acc OrderAcceptedMessage
+	c1.waitFor(MsgOrderAccepted, &acc)
+	if acc.Delivery != "messenger" || acc.MessengerID == "" || acc.ETATicks <= 0 {
+		t.Fatalf("order_accepted: %+v", acc)
+	}
+	var sent MessengerUpdatedMessage
+	c1.waitFor(MsgMessengerUpdated, &sent)
+	if sent.Status != "pending" || sent.Reason != "dispatched" || sent.DivisionID != scout.ID || sent.Order.Type != "hold" {
+		t.Fatalf("messenger dispatched: %+v", sent)
+	}
+	var st GameStateMessage
+	c1.waitFor(MsgGameState, &st)
+	for _, d := range st.Divisions {
+		if d.ID == scout.ID && (d.PendingOrder == nil || d.PendingOrder.MessengerID != acc.MessengerID) {
+			t.Fatalf("pending order missing: %+v", d)
+		}
+	}
+	if len(st.Messengers) != 1 || st.Messengers[0].ID != acc.MessengerID {
+		t.Fatalf("messengers in state: %+v", st.Messengers)
+	}
+	var theirs GameStateMessage
+	c2.waitFor(MsgGameState, &theirs)
+	if len(theirs.Messengers) != 0 {
+		t.Fatal("the opponent must not see messengers")
+	}
+	var done MessengerUpdatedMessage
+	c1.waitFor(MsgMessengerUpdated, &done)
+	if done.Status != "delivered" || done.MessengerID != acc.MessengerID {
+		t.Fatalf("messenger delivered: %+v", done)
+	}
+
+	// The scout is outside the commander's comm radius: refused (it would
+	// skip the messenger). The general's division is within it: accepted.
+	c1.send(map[string]any{"type": "assign_commander", "request_id": "a0", "division_id": scout.ID, "commander_id": armoredCmd.ID})
+	var far ErrorMessage
+	c1.waitFor(MsgError, &far)
+	if far.Code != "commander_out_of_range" || far.RequestID != "a0" {
+		t.Fatalf("out-of-range assignment: %+v", far)
+	}
+	var infantry DivisionDTO
+	for _, d := range started.State.Divisions {
+		if d.PlayerID == created.PlayerID && d.Name == "Infantry" {
+			infantry = d
+		}
+	}
+	c1.send(map[string]any{"type": "assign_commander", "request_id": "a1", "division_id": infantry.ID, "commander_id": armoredCmd.ID})
+	for {
+		var upd DivisionUpdatedMessage
+		c1.waitFor(MsgDivisionUpdated, &upd)
+		if upd.Reason == "commander_assigned" {
+			if upd.Division.ID != infantry.ID || upd.Division.CommanderID != armoredCmd.ID {
+				t.Fatalf("assignment: %+v", upd.Division)
+			}
+			break
+		}
+	}
+	c1.send(map[string]any{"type": "assign_commander", "request_id": "a2", "division_id": scout.ID, "commander_id": "commander-99"})
+	var e ErrorMessage
+	c1.waitFor(MsgError, &e)
+	if e.Code != "commander_not_found" || e.RequestID != "a2" {
+		t.Fatalf("bad assignment: %+v", e)
+	}
 }

@@ -21,6 +21,9 @@ type Division struct {
 	// Routed divisions retreat automatically and ignore orders until they
 	// rally (morale >= RallyMoraleThreshold).
 	Routed bool
+	// CommanderID is the command unit the division reports to ("" = the
+	// general directly). See command.go.
+	CommanderID CommandUnitID
 
 	// Simulation internals (not part of the public state).
 	home       Position   // deployment point, default retreat target
@@ -50,4 +53,9 @@ func (d *Division) orderType() OrderType {
 type Army struct {
 	PlayerID    player.ID
 	DivisionIDs []DivisionID
+	// GeneralID is the army's general ("" = no chain of command).
+	GeneralID CommandUnitID
+	// successionAt is the tick at which a successor takes over a lost
+	// general (-1 = no succession pending).
+	successionAt int64
 }

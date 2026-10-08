@@ -55,6 +55,50 @@ Cada round también baja la moral (más cuanto mayores las bajas), sube la fatig
 
 **Victoria:** el rival se queda sin divisiones (`annihilation`), se alcanza `max_duration_ticks` (gana quien tenga más tropas, `time_limit`), el rival lleva desconectado más de `disconnect_grace_ticks` (`opponent_disconnected`) o ambos abandonan (`abandoned`, sin ganador).
 
+## Cadena de mando
+
+Cada ejército puede tener un **general** y varios **comandantes** (`internal/game/command.go`). Se definen en la plantilla del ejército:
+
+- `leads`: la división **lleva** una unidad de mando. Vale `"general"` o el nombre de un comandante.
+- `commander`: indica a qué comandante **reporta** la división. Vacío significa que reporta directamente al general.
+
+Un ejército sin `leads` no tiene cadena de mando y todas sus órdenes son inmediatas, como antes. El ejército por defecto es así:
+
+| División | Lleva | Reporta a |
+|----------|-------|-----------|
+| 1st Infantry | Infantry Command | Infantry Command |
+| 2nd Infantry | — | Infantry Command (necesita mensajero si se aleja más de 350) |
+| 1st Armored | General | (el general) |
+
+La división anfitriona de un comandante siempre reporta a ese comandante (se valida en la plantilla y en `assign_commander`).
+
+**Unidad de mando.** Viaja con su división anfitriona: su posición es la de la división. Queda **incapacitada** mientras esa división está en desbandada y **eliminada** cuando la destruyen. Tiene dos radios independientes, `comm_radius` y `influence_radius`. Sus subordinados no se guardan aparte: son las divisiones cuyo `commander_id` apunta a ella.
+
+**Quién transmite una orden.** Si el general viaja en la división, el general. Si no, el comandante de la división si está activo. Si no, el general, si está activo. Si no hay ninguno, la orden se rechaza con `no_command` y la división conserva su última orden. Si la regla explícita `general_relay` está activada (desactivada por defecto), el general también puede dar órdenes inmediatas dentro de su propio radio.
+
+**Entrega.** Dentro del `comm_radius` de quien transmite, la orden es **inmediata**: se aplica en el tick siguiente, como siempre. Fuera de él, se crea un **mensajero**:
+- registra emisor, división, orden, tick de envío y ETA;
+- sale de la posición del emisor y sigue a la división con el `FindPath`/`Step` existentes, a `messenger_speed` y con los modificadores del terreno;
+- a `messenger_delivery_range` de la división, la orden se **valida de nuevo** y entra en la misma cola que las inmediatas.
+
+Si al llegar la orden ya no es válida (objetivo destruido, división en combate...), el mensaje se cancela con ese código. Mientras el mensajero viaja, la división sigue con su orden anterior.
+
+**Reglas de los mensajes:**
+- Hay como máximo un mensaje por división.
+- Una orden nueva cancela la pendiente (`superseded`), tanto si sale con mensajero como si es inmediata.
+- Una orden idéntica a la pendiente devuelve la misma orden y no envía otro mensajero.
+- Los mensajeros no se pueden interceptar todavía (`intercepted` está reservado).
+
+**Liderazgo.** Dentro del `influence_radius` de su comandante o de su general activos:
+- la moral cuenta `leadership_morale_bonus` más en cada round de combate;
+- la moral se recupera `leadership_recovery_factor` veces más rápido fuera de combate.
+
+El bonus se calcula en cada round y **nunca se guarda**, así que no se acumula.
+
+**Bajas en el mando:**
+- **Si cae un comandante,** sus divisiones pierden el bonus y pasan a recibir órdenes del general. El jugador puede reasignarlas con `assign_commander` a otro mando activo, siempre que la división esté dentro del `comm_radius` del nuevo mando. Si no lo está, la respuesta es `commander_out_of_range`; así una reasignación no sirve para saltarse un mensajero. La reasignación solo la ve su dueño.
+- **Si cae el general,** las divisiones y los comandantes siguen con sus órdenes. Tras `succession_delay_ticks`, el primer comandante activo asciende a general con sus radios y conserva sus divisiones. Si no queda ninguno, las divisiones conservan su última orden.
+
 ## Partida contra la IA
 
 `create_ai_game` crea una partida en la que el segundo jugador es un **bot del servidor**. El bot es un jugador normal: tiene su propio `player_id` (`bot-N`), está marcado con `bot: true`, siempre está listo y no tiene conexión WebSocket. La partida empieza cuando el humano envía `ready`, con la cuenta atrás y las condiciones de victoria habituales. Si el humano se desconecta, la partida sigue, puede reconectarse con su token y, pasado `disconnect_grace_ticks`, gana el bot (`opponent_disconnected`). Si abandona en el lobby, la sala se cierra.
@@ -70,6 +114,13 @@ La IA (`internal/ai.Bot`) se ejecuta dentro de la goroutine de la `Room`, despu�
    - **mantener posiciones:** no reenvía una orden que la división ya ejecuta, ni repite la misma orden antes de `reissue_cooldown_ticks`. Las divisiones en combate o en desbandada no reciben órdenes.
 3. Envía las órdenes con `Game.SubmitOrder`, con la misma validación que las de un humano. Nunca toca posiciones, tropas ni combates.
 4. Deja de decidir cuando la partida termina.
+
+**Cadena de mando:** la IA usa las mismas reglas que un humano:
+- sus órdenes fuera de rango viajan con mensajero;
+- no reenvía una orden que ya transporta un mensajero;
+- no da órdenes a divisiones sin mando;
+- no cambia las órdenes de divisiones fuera de rango salvo por urgencia (retirada o defensa de la base);
+- reasigna las divisiones de un comandante caído al comandante activo más cercano.
 
 Cada orden se registra (`msg="ai decision"`) con división, acción, objetivo y motivo. Los cambios de modo se registran como `msg="ai mode changed"`. Como no hay comandantes ni mensajeros, el bot da órdenes con la misma latencia que un jugador humano (se aplican en el siguiente tick).
 
@@ -112,6 +163,7 @@ Cada mensaje es un objeto plano con `type`. Todos los mensajes del cliente acept
 {"type":"defend_division","division_id":"division-1"}
 {"type":"retreat_division","division_id":"division-1"}               // x,y opcionales; por defecto a su despliegue
 {"type":"hold_division","division_id":"division-1"}
+{"type":"assign_commander","division_id":"division-2","commander_id":"commander-4"}   // cadena de mando
 ```
 
 ### Servidor → cliente
@@ -122,7 +174,9 @@ Cada mensaje es un objeto plano con `type`. Todos los mensajes del cliente acept
 | `lobby_updated` | alguien entra, sale, cambia `ready` o se desconecta. Cada jugador lleva `bot: true` si lo controla el servidor |
 | `game_started` | fin de la cuenta atrás, incluye el estado inicial |
 | `game_state` | snapshot autoritativo cada `snapshot_every_ticks` |
-| `order_accepted` | orden validada (se aplica en el próximo tick) |
+| `order_accepted` | orden validada. `delivery`: `immediate` (se aplica en el próximo tick) o `messenger` (con `messenger_id` y `eta_ticks` estimados) |
+| `messenger_updated` | (solo al dueño) mensajero `pending`/`dispatched`, `delivered` o `cancelled` (`reason`: `superseded`, `recipient_destroyed`, `game_finished` o el código de validación al llegar), con la `order` |
+| `command_updated` | un general o comandante cambia de `status` (`active`, `incapacitated`, `eliminated`; `reason`: `host_routed`, `host_rallied`, `host_destroyed`) o asciende (`promoted`) |
 | `division_updated` | cambia la orden o el estado de una división (`reason`: order, arrived, blocked, battle_started, battle_ended, routed, rallied, target_destroyed) |
 | `battle_started` / `battle_updated` / `battle_ended` | contacto, cada round (bajas, moral, ataque/defensa efectivos) y final |
 | `division_destroyed` | división eliminada |
@@ -144,7 +198,14 @@ Ejemplo de `game_state`:
 
 `map.tiles` es una lista de filas (la fila 0 corresponde a y=0) con un carácter por casilla: `P` llanura, `F` bosque, `H` colina, `W` agua. El mapa incluye su leyenda y la tabla de modificadores.
 
-Códigos de error: `bad_request`, `unknown_message_type`, `not_in_game`, `already_in_game`, `game_not_found`, `game_closed`, `game_full`, `invalid_state`, `game_not_running`, `player_not_found`, `division_not_found`, `not_owner`, `division_destroyed`, `division_routed`, `division_engaged` (una división en combate solo acepta RETREAT/DEFEND/HOLD), `target_required`, `target_not_found`, `target_friendly`, `target_destroyed`, `invalid_position`, `impassable_position`, `unreachable_position`, `timeout`.
+Códigos de error: `bad_request`, `unknown_message_type`, `not_in_game`, `already_in_game`, `game_not_found`, `game_closed`, `game_full`, `invalid_state`, `game_not_running`, `player_not_found`, `division_not_found`, `not_owner`, `division_destroyed`, `division_routed`, `division_engaged` (una división en combate solo acepta RETREAT/DEFEND/HOLD), `target_required`, `target_not_found`, `target_friendly`, `target_destroyed`, `invalid_position`, `impassable_position`, `unreachable_position`, `no_command`, `commander_not_found`, `commander_inactive`, `commander_out_of_range`, `invalid_assignment` (la división anfitriona de un comandante siempre reporta a él), `timeout`.
+
+**Cadena de mando en `game_state`:**
+- `commanders` lista cada general y comandante visible: `id`, `player_id`, `role`, `name`, `host_division_id`, `x`, `y`, `status`, `comm_radius` y `influence_radius`.
+- `messengers` lista los mensajeros propios en tránsito: `id`, `sender_id`, `division_id`, `x`, `y`, `sent_tick`, `eta_ticks` y `order`.
+- Las divisiones propias llevan `commander_id`, `command_link` (`in_range`, `out_of_range` o `no_command`) y `pending_order` (`messenger_id`, `eta_ticks` y `order`).
+
+El rival no recibe nada de esto, salvo la lista `commanders`, que es visible porque las unidades de mando viajan con divisiones visibles. Todo se omite si no hay cadena de mando.
 
 ### Flujo mínimo desde Godot 4
 
@@ -182,5 +243,19 @@ El cliente nunca debe mover unidades por su cuenta. Solo interpola entre los sna
 - integración del game loop: partida completa con un guion en el mapa real (consistencia de eventos e invariantes) y determinismo (dos ejecuciones idénticas)
 - `app`: ciclo de vida de una sala (join, partida llena, ready, inicio, órdenes, reconexión con token, desconexión obsoleta, abandono)
 - `network`: endpoints HTTP y una partida completa por WebSocket real (crear, unirse, iniciar, MOVE, ATTACK, combate, DEFEND, desconexión y victoria), y una partida contra la IA (`create_ai_game`, bot en el lobby, plaza ocupada, órdenes del humano, el bot actúa y combate)
-- `ai`: atacar, defender la base, retirada y guardia, histéresis de moral y de ataque, reagrupamiento, reparto de objetivos, no repetir órdenes, solo información visible, sin órdenes fuera de RUNNING, determinismo
+- `game` (cadena de mando):
+  - despliegue;
+  - orden inmediata en rango y orden por mensajero fuera de él, que llega según la ETA y mantiene la orden anterior mientras tanto;
+  - sustitución y deduplicación;
+  - nueva validación al llegar y destinatario destruido;
+  - caída de un comandante y reasignación;
+  - caída del general y sucesión;
+  - incapacitado mientras su división está en desbandada;
+  - `no_command`;
+  - bonus de moral no acumulativo;
+  - privacidad;
+  - ejércitos sin cadena de mando sin cambios;
+  - validación de la plantilla.
+- `ai`: atacar, defender la base, retirada y guardia, histéresis de moral y de ataque, reagrupamiento, reparto de objetivos, no repetir órdenes, solo información visible, sin órdenes fuera de RUNNING, determinismo, respeto de rangos y órdenes pendientes, sin órdenes a divisiones sin mando, reasignación tras la caída de un comandante. También en `app`: las órdenes del bot a divisiones fuera de rango no se aplican antes de que llegue el mensajero
+- `network` (cadena de mando): comandantes y enlaces en el estado, orden con mensajero (`order_accepted`, `messenger_updated` pendiente y entregado, `pending_order`), privacidad frente al rival, `assign_commander` y su error
 - `app` (IA): partida completa contra un humano pasivo hasta el final. Se comprueba que no hay órdenes rechazadas, que las bajas coinciden con los rounds de combate, que la velocidad y el terreno se respetan, que no hay oscilaciones y que el bot no decide después del final. También la victoria del bot por desconexión y el cierre del lobby
