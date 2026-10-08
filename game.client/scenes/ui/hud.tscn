@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/ui/top_bar.tscn" id="2_top_bar"]
@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/event_log.tscn" id="4_event_log"]
 [ext_resource type="PackedScene" path="res://scenes/ui/debug_overlay.tscn" id="5_debug_overlay"]
 [ext_resource type="PackedScene" path="res://scenes/ui/game_over_panel.tscn" id="6_game_over"]
+[ext_resource type="PackedScene" path="res://scenes/ui/division_action_menu.tscn" id="7_action_menu"]
+[ext_resource type="Script" path="res://scripts/ui/selection_box.gd" id="8_selection_box"]
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_script")
@@ -17,5 +19,10 @@ script = ExtResource("1_script")
 [node name="EventLog" parent="." instance=ExtResource("4_event_log")]
 
 [node name="DebugOverlay" parent="." instance=ExtResource("5_debug_overlay")]
+
+[node name="SelectionBox" type="Control" parent="."]
+script = ExtResource("8_selection_box")
+
+[node name="ActionMenu" parent="." instance=ExtResource("7_action_menu")]
 
 [node name="GameOverPanel" parent="." instance=ExtResource("6_game_over")]

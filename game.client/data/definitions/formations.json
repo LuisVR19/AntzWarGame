@@ -1,0 +1,33 @@
+{
+  "_comment": "Formaciones. attack / defense_* / speed son multiplicadores. defense_front|flank|rear dependen del lado por el que llega el golpe (frente: hasta 60 grados de la orientacion, retaguardia: desde 120). frontage = soldados que pueden luchar a la vez (el resto es reserva). turn_rate = grados por segundo que gira en combate hacia su enemigo. bonus_vs = multiplicador de ataque contra otra formacion.",
+  "LINE": {
+    "name": "Línea", "short": "Línea",
+    "description": "Equilibrada: sin grandes virtudes ni defectos.",
+    "attack": 1.0, "defense_front": 1.0, "defense_flank": 0.75, "defense_rear": 0.55,
+    "speed": 1.0, "frontage": 2000, "turn_rate": 60, "bonus_vs": {}
+  },
+  "SHIELD_WALL": {
+    "name": "Muro de escudos", "short": "Muro",
+    "description": "Frente casi impenetrable, pero costados y retaguardia muy débiles. Lenta y gira despacio.",
+    "attack": 0.75, "defense_front": 1.7, "defense_flank": 0.6, "defense_rear": 0.45,
+    "speed": 0.6, "frontage": 1800, "turn_rate": 20, "bonus_vs": {}
+  },
+  "WEDGE": {
+    "name": "Cuña", "short": "Cuña",
+    "description": "Rompe muros y líneas, pero defiende mal y lucha con un frente estrecho.",
+    "attack": 1.35, "defense_front": 0.85, "defense_flank": 0.6, "defense_rear": 0.5,
+    "speed": 1.1, "frontage": 1000, "turn_rate": 45, "bonus_vs": { "SHIELD_WALL": 1.4, "LINE": 1.15 }
+  },
+  "SQUARE": {
+    "name": "Erizo", "short": "Erizo",
+    "description": "Sin flancos: aguanta rodeada por todos lados, pero ataca poco y casi no se mueve.",
+    "attack": 0.7, "defense_front": 1.25, "defense_flank": 1.25, "defense_rear": 1.25,
+    "speed": 0.45, "frontage": 1600, "turn_rate": 360, "bonus_vs": { "WEDGE": 0.8 }
+  },
+  "COLUMN": {
+    "name": "Columna", "short": "Columna",
+    "description": "Para marchar: la más rápida, pero muy vulnerable si la atacan.",
+    "attack": 0.7, "defense_front": 0.75, "defense_flank": 0.5, "defense_rear": 0.5,
+    "speed": 1.35, "frontage": 600, "turn_rate": 90, "bonus_vs": {}
+  }
+}

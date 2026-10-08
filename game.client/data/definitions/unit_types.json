@@ -1,0 +1,29 @@
+{
+  "_comment": "Tipos de hormiga. Las estadisticas son las de base de una division de ese tipo (un ejercito puede sobrescribirlas). ranged = ataca a distancia: range en unidades de mundo (50 = una casilla) y attack del disparo. look = como se dibujan sus hormigas.",
+  "WORKER": {
+    "name": "Obrera", "description": "Infantería básica y numerosa.",
+    "attack": 10, "defense": 12, "speed": 30, "morale": 80, "experience": 10,
+    "look": { "ant_size": 2.3, "head": 0.55, "mark": "" }
+  },
+  "SOLDIER": {
+    "name": "Soldado", "description": "Mandíbulas enormes: mucho ataque, poca defensa.",
+    "attack": 16, "defense": 8, "speed": 45, "morale": 85, "experience": 20,
+    "look": { "ant_size": 2.6, "head": 0.9, "mark": "" }
+  },
+  "ARCHER": {
+    "name": "Arquera", "description": "Lanza ácido a distancia sin entrar en combate. Muy débil si la alcanzan.",
+    "attack": 5, "defense": 6, "speed": 35, "morale": 75, "experience": 10,
+    "ranged": { "range": 220, "attack": 11 },
+    "look": { "ant_size": 2.1, "head": 0.5, "mark": "acid" }
+  },
+  "TANK": {
+    "name": "Acorazada", "description": "Caparazón grueso: aguanta casi todo y no se desmoraliza, pero es lenta.",
+    "attack": 11, "defense": 22, "speed": 20, "morale": 95, "experience": 15,
+    "look": { "ant_size": 3.2, "head": 0.6, "mark": "armor" }
+  },
+  "SCOUT": {
+    "name": "Exploradora", "description": "Muy rápida y frágil: ideal para flanquear y cazar arqueras.",
+    "attack": 9, "defense": 7, "speed": 70, "morale": 70, "experience": 10,
+    "look": { "ant_size": 1.9, "head": 0.5, "mark": "stripe" }
+  }
+}

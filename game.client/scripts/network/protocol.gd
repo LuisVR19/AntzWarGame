@@ -12,6 +12,10 @@ const ATTACK_DIVISION := "attack_division"
 const DEFEND_DIVISION := "defend_division"
 const RETREAT_DIVISION := "retreat_division"
 const HOLD_DIVISION := "hold_division"
+## Split / merge: local simulation only for now (not in game.server yet).
+const SPLIT_DIVISION := "split_division"
+const MERGE_DIVISION := "merge_division"
+const SET_FORMATION := "set_formation"
 
 # Server -> client
 const GAME_CREATED := "game_created"
@@ -25,6 +29,10 @@ const BATTLE_STARTED := "battle_started"
 const BATTLE_UPDATED := "battle_updated"
 const BATTLE_ENDED := "battle_ended"
 const DIVISION_DESTROYED := "division_destroyed"
+const DIVISION_SPLIT := "division_split"
+const DIVISIONS_MERGED := "divisions_merged"
+## Ranged attack of archers (local simulation only).
+const VOLLEY := "volley"
 const GAME_FINISHED := "game_finished"
 const ERROR := "error"
 

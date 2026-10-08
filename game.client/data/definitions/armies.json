@@ -1,0 +1,40 @@
+{
+  "_comment": "Ejercitos iniciales (cada jugador recibe el mismo). type = tipo de unit_types.json; unit_count = soldados. Opcional: name, offset (respecto al spawn; si falta se despliega en filas automaticamente) y attack/defense/speed/morale/experience para sobrescribir las del tipo. El primero es el ejercito por defecto.",
+  "small": {
+    "name": "Pequeño",
+    "description": "3 divisiones · 8.000 hormigas (obreras y soldados)",
+    "divisions": [
+      { "type": "WORKER",  "name": "1a Division Obrera",  "offset": { "x": 0,   "y": -150 }, "unit_count": 3000 },
+      { "type": "WORKER",  "name": "2a Division Obrera",  "offset": { "x": 0,   "y": 150 },  "unit_count": 3000 },
+      { "type": "SOLDIER", "name": "1a Division Soldado", "offset": { "x": -80, "y": 0 },    "unit_count": 2000 }
+    ]
+  },
+  "medium": {
+    "name": "Mediano",
+    "description": "6 divisiones · 12.500 hormigas (un poco de cada tipo)",
+    "divisions": [
+      { "type": "WORKER",  "unit_count": 3000 },
+      { "type": "TANK",    "unit_count": 2000 },
+      { "type": "WORKER",  "unit_count": 3000 },
+      { "type": "SOLDIER", "unit_count": 2000 },
+      { "type": "ARCHER",  "unit_count": 1500 },
+      { "type": "SCOUT",   "unit_count": 1000 }
+    ]
+  },
+  "large": {
+    "name": "Grande",
+    "description": "10 divisiones · 21.000 hormigas (todos los tipos)",
+    "divisions": [
+      { "type": "TANK",    "unit_count": 2000 },
+      { "type": "WORKER",  "unit_count": 3000 },
+      { "type": "WORKER",  "unit_count": 3000 },
+      { "type": "TANK",    "unit_count": 2000 },
+      { "type": "SOLDIER", "unit_count": 2000 },
+      { "type": "ARCHER",  "unit_count": 1500 },
+      { "type": "ARCHER",  "unit_count": 1500 },
+      { "type": "SOLDIER", "unit_count": 2000 },
+      { "type": "WORKER",  "unit_count": 3000 },
+      { "type": "SCOUT",   "unit_count": 1000 }
+    ]
+  }
+}

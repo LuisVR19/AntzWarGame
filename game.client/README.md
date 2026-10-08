@@ -1,13 +1,13 @@
 # AntzGame: cliente Godot 4 (MVP)
 
-Frontend del juego de estrategia 1v1 de ejércitos de hormigas. Todo se dibuja con formas simples, sin assets. Puede jugarse contra una **simulación local** o contra el **servidor Go autoritativo** (`../game.server`).
+Frontend del juego de estrategia 1v1 de ejércitos de hormigas, en **2D isométrico**. Todo se dibuja con formas simples; los assets se añaden en `assets/` sin tocar la lógica (ver `assets/README.md`). Puede jugarse contra una **simulación local** o contra el **servidor Go autoritativo** (`../game.server`).
 
-> ⚠️ Escrito sin Godot instalado: no se ha ejecutado nunca. Antes de nada, lee **[docs/AVANCE.md](docs/AVANCE.md)**: estado, checklist y riesgos.
+> Verificado en Godot 4.7.2 (30/30 tests OK). Estado y detalles en **[docs/AVANCE.md](docs/AVANCE.md)**.
 
 ## Ejecutar
 
 1. Godot 4.3+ → *Import* → `project.godot` → F5.
-2. **Partida local:** botón "Partida local (sin servidor)". Tab cambia el jugador controlado.
+2. **Partida local:** elige el **mapa** (pequeño 40x24 o grande 80x48) y el **tamaño del ejército** (pequeño, mediano o grande) y pulsa "Partida local (sin servidor)". Tab cambia el jugador controlado.
 3. **Contra el servidor:** `cd ../game.server && go run ./cmd/server`. En el cliente, "Conectar" con el ID vacío crea la partida; el segundo jugador introduce ese ID. Ambos pulsan "¡Listo!".
 
 ## Tests
@@ -23,12 +23,19 @@ Más detalles en `docs/AVANCE.md` §10.
 
 | Entrada | Acción |
 |---------|--------|
-| Clic izquierdo | seleccionar / deseleccionar |
-| Clic derecho | orden contextual: suelo → MOVER, enemigo → ATACAR |
+| Clic izquierdo | seleccionar división, edificio o recurso / deseleccionar. En una división tuya abre su **menú de órdenes** |
+| Clic izquierdo + arrastrar | **recuadro de selección**: selecciona varias divisiones propias; las órdenes van a todas |
+| Shift + clic / Shift + recuadro | añadir o quitar divisiones de la selección |
+| Ctrl+A | seleccionar todas tus divisiones |
+| Menú → MOVER / ATACAR | el siguiente clic izquierdo elige el destino o el enemigo (con línea de previsualización) |
+| Clic derecho (corto) | orden rápida: suelo → MOVER, enemigo → ATACAR |
+| Clic derecho + arrastrar | desplazar el mapa |
 | 1 2 3 4 5 | MOVER, ATACAR, DEFENDER, RETIRARSE, MANTENER |
-| Esc | cancelar la orden en curso o deseleccionar |
+| 6 / 7 | DIVIDIR (en dos mitades) / UNIR (luego clic en otra división propia). Solo en partida local |
+| F | siguiente formación (también hay botones en el panel y en el menú de la división). Solo en partida local |
+| Esc | cancelar la orden en curso, cerrar el menú o deseleccionar |
 | Rueda | zoom hacia el cursor |
-| WASD / flechas / botón central | desplazar la cámara |
+| WASD / flechas / ratón en el borde / botón central | desplazar la cámara |
 | F3 | modo debug |
 | Tab | (local) cambiar de jugador |
 

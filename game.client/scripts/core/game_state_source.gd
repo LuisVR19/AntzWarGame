@@ -54,6 +54,16 @@ func switch_controlled_player() -> void:
 	pass
 
 
+## True if the source implements split/merge (the Go server does not yet).
+func supports_split_merge() -> bool:
+	return false
+
+
+## True if the source implements formations (the Go server does not yet).
+func supports_formations() -> bool:
+	return false
+
+
 func source_name() -> String:
 	return "abstract"
 
@@ -100,8 +110,22 @@ func _handle_message(msg: Dictionary) -> void:
 			state.upsert_division(d)
 			division_changed.emit(d, str(msg.get("reason", "")))
 		game_event.emit(GameEvent.from_message(msg))
+	elif type == Protocol.DIVISION_SPLIT:
+		for key in ["division", "new_division"]:
+			var raw: Variant = msg.get(key)
+			if raw is Dictionary:
+				state.upsert_division(DivisionData.from_protocol(raw))
+		game_event.emit(GameEvent.from_message(msg))
+		state_updated.emit(state)
+	elif type == Protocol.DIVISIONS_MERGED:
+		state.remove_division(str(msg.get("merged_division_id", "")))
+		var merged_raw: Variant = msg.get("division")
+		if merged_raw is Dictionary:
+			state.upsert_division(DivisionData.from_protocol(merged_raw))
+		game_event.emit(GameEvent.from_message(msg))
+		state_updated.emit(state)
 	elif type in [Protocol.ORDER_ACCEPTED, Protocol.BATTLE_STARTED, Protocol.BATTLE_UPDATED,
-			Protocol.BATTLE_ENDED, Protocol.DIVISION_DESTROYED]:
+			Protocol.BATTLE_ENDED, Protocol.DIVISION_DESTROYED, Protocol.VOLLEY]:
 		game_event.emit(GameEvent.from_message(msg))
 	elif type == Protocol.GAME_FINISHED:
 		state.status = GameTypes.STATUS_FINISHED

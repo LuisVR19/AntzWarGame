@@ -52,6 +52,11 @@ func upsert_division(d: DivisionData) -> void:
 	divisions[d.id] = d
 
 
+func remove_division(id: String) -> void:
+	divisions.erase(id)
+	division_ids.erase(id)
+
+
 func get_division(id: String) -> DivisionData:
 	return divisions.get(id) as DivisionData
 

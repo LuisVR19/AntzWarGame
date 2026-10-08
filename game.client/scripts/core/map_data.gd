@@ -19,8 +19,9 @@ var spawns: Array[Vector2] = []
 var terrain: TerrainTable = TerrainTable.new()
 
 
-static func from_definitions() -> MapData:
-	var raw := Definitions.default_map()
+## Map from data/definitions/maps.json ("" = the default map).
+static func from_definitions(map_id := "") -> MapData:
+	var raw := Definitions.map_def(map_id)
 	var map := _from_raw(raw)
 	map.terrain = TerrainTable.from_dict(Definitions.terrain())
 	return map

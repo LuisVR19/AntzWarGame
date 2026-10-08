@@ -1,0 +1,15 @@
+{
+  "_comment": "Mapas para la partida local. file = casillas y spawns; objects = edificios y recursos (solo cliente). El primero es el mapa por defecto.",
+  "default": {
+    "name": "Pequeño (40x24)",
+    "description": "El mapa original: un río con dos vados.",
+    "file": "res://data/definitions/map_default.json",
+    "objects": "res://data/definitions/map_objects.json"
+  },
+  "large": {
+    "name": "Grande (80x48)",
+    "description": "Cuatro veces más grande: río con cuatro vados, lagos, bosques y colinas.",
+    "file": "res://data/definitions/map_large.json",
+    "objects": "res://data/definitions/map_large_objects.json"
+  }
+}

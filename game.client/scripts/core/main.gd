@@ -14,8 +14,11 @@ func _ready() -> void:
 	menu.online_requested.connect(_start_online)
 
 
-func _start_local() -> void:
-	_start(LocalGameState.new())
+func _start_local(map_id: String, army_id: String) -> void:
+	var source := LocalGameState.new()
+	source.map_id = map_id
+	source.army_id = army_id
+	_start(source)
 
 
 func _start_online(url: String, player_name: String, game_id: String) -> void:

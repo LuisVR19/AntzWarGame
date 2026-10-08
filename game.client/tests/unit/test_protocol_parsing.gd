@@ -98,3 +98,33 @@ func test_source_parses_session_and_results() -> bool:
 	check_eq(finished[1][0], "draw", "empate")
 	src.free()
 	return done()
+
+
+func test_split_merge_messages_and_events() -> bool:
+	check_eq(Order.split("division-1").to_message(), {"division_id": "division-1", "type": "split_division", "ratio": 0.5}, "split_division")
+	check_eq(Order.merge("division-1", "division-3").to_message(),
+		{"division_id": "division-1", "type": "merge_division", "target_division_id": "division-3"}, "merge_division")
+	var source := GameStateSource.new()
+	source.state.apply_snapshot({"divisions": [{"id": "division-1", "player_id": "p1", "unit_count": 3000}]})
+	source._handle_message({"type": "division_split", "tick": 5,
+		"division": {"id": "division-1", "player_id": "p1", "unit_count": 1500},
+		"new_division": {"id": "division-7", "player_id": "p1", "unit_count": 1500}})
+	check(source.state.get_division("division-7") != null, "division_split añade la nueva división")
+	check_eq(source.state.get_division("division-1").unit_count, 1500, "y actualiza la original")
+	source._handle_message({"type": "divisions_merged", "tick": 9, "division_id": "division-1",
+		"merged_division_id": "division-7", "division": {"id": "division-1", "player_id": "p1", "unit_count": 3000}})
+	check(source.state.get_division("division-7") == null, "divisions_merged elimina la absorbida")
+	check_eq(source.state.get_division("division-1").unit_count, 3000, "y actualiza la resultante")
+	source.free()
+	return done()
+
+
+func test_formation_message_and_fields() -> bool:
+	check_eq(Order.change_formation("division-1", Formations.SHIELD_WALL).to_message(),
+		{"division_id": "division-1", "type": "set_formation", "formation": "shield_wall"}, "set_formation")
+	var d := DivisionData.from_protocol({"id": "d", "formation": "wedge", "facing": 1.5, "reforming": true})
+	check_eq(d.formation, Formations.WEDGE, "formación")
+	check_near(d.facing, 1.5, 0.001, "orientación")
+	check(d.reforming, "reorganizándose")
+	check_eq(DivisionData.from_protocol({"id": "d"}).formation, Formations.LINE, "sin el campo (servidor Go): línea")
+	return done()

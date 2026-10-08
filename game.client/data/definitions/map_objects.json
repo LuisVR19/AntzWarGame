@@ -1,0 +1,22 @@
+{
+  "_comment": "Edificios y recursos del mapa por defecto (solo cliente: no afectan a la simulacion). Se aplican si el mapa tiene cols x rows; base_building se coloca siempre centrado en cada spawn. side 0 = azul, 1 = rojo. cell = casilla de origen (esquina superior de la huella).",
+  "cols": 40,
+  "rows": 24,
+  "base_building": "anthill",
+  "buildings": [
+    { "type": "barracks",   "side": 0, "cell": { "x": 1,  "y": 6 } },
+    { "type": "storehouse", "side": 0, "cell": { "x": 2,  "y": 17 } },
+    { "type": "barracks",   "side": 1, "cell": { "x": 37, "y": 6 } },
+    { "type": "storehouse", "side": 1, "cell": { "x": 37, "y": 17 } }
+  ],
+  "resources": [
+    { "type": "FOOD",  "cell": { "x": 8,  "y": 16 }, "amount": 1200 },
+    { "type": "FOOD",  "cell": { "x": 31, "y": 16 }, "amount": 1200 },
+    { "type": "WOOD",  "cell": { "x": 13, "y": 4 },  "amount": 800 },
+    { "type": "WOOD",  "cell": { "x": 26, "y": 18 }, "amount": 800 },
+    { "type": "STONE", "cell": { "x": 14, "y": 6 },  "amount": 600 },
+    { "type": "STONE", "cell": { "x": 25, "y": 17 }, "amount": 600 },
+    { "type": "GOLD",  "cell": { "x": 17, "y": 12 }, "amount": 1500 },
+    { "type": "GOLD",  "cell": { "x": 22, "y": 11 }, "amount": 1500 }
+  ]
+}

@@ -6,6 +6,9 @@ extends GameStateSource
 
 const MAX_STEPS_PER_FRAME := 5
 
+## Chosen in the main menu ("" = defaults from maps.json / armies.json).
+var map_id := ""
+var army_id := ""
 var _sim: LocalGameSimulation
 var _accumulator := 0.0
 var _tick_interval := 0.1
@@ -13,7 +16,7 @@ var _tick_interval := 0.1
 
 func start() -> void:
 	var rules := Definitions.rules()
-	_sim = LocalGameSimulation.new(rules, MapData.from_definitions(), Definitions.army())
+	_sim = LocalGameSimulation.new(rules, MapData.from_definitions(map_id), Definitions.army(army_id))
 	_tick_interval = 1.0 / float(_sim.tick_rate)
 	_deliver(_sim.joined_message(LocalGameSimulation.PLAYER_1))
 	_deliver(_sim.start())
@@ -25,6 +28,14 @@ func stop() -> void:
 
 func source_name() -> String:
 	return "Simulación local"
+
+
+func supports_split_merge() -> bool:
+	return true
+
+
+func supports_formations() -> bool:
+	return true
 
 
 func can_switch_player() -> bool:

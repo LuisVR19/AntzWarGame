@@ -1,0 +1,6 @@
+{
+  "_comment": "Tipos de edificio. size = huella en casillas (ancho, alto). shape = placeholder (mound | box). asset = textura opcional que sustituye al placeholder si existe.",
+  "anthill":    { "name": "Hormiguero",          "size": [3, 3], "max_hp": 3000, "shape": "mound", "asset": "res://assets/buildings/anthill.svg" },
+  "barracks":   { "name": "Cuartel de soldados", "size": [2, 2], "max_hp": 1500, "shape": "box",   "asset": "res://assets/buildings/barracks.svg" },
+  "storehouse": { "name": "Almacen",             "size": [1, 1], "max_hp": 600,  "shape": "box",   "asset": "res://assets/buildings/storehouse.svg" }
+}

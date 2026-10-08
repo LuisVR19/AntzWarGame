@@ -1,10 +1,20 @@
 {
-  "_comment": "Reglas de la simulacion LOCAL (modo sin servidor). Mismos nombres y valores por defecto que game.server/configs/server.json.",
+  "_comment": "Reglas de la simulacion LOCAL (modo sin servidor). Mismos nombres y valores por defecto que game.server/configs/server.json. Solo locales: dividir/unir, formaciones, rutas y el espacio fisico. Las divisiones ocupan un circulo (division_radius a 3000 soldados, crece con exponente division_radius_exponent) y no se solapan; combate, separacion y union se miden borde a borde: contacto + engagement_margin / disengage_margin / merge_margin. El servidor usa engagement_range/disengage_range fijos. Ayuda automatica: una division sin orden a menos de assist_radius de una aliada en combate ataca a su enemigo (MANTENER nunca; DEFENDER solo si assist_while_defending).",
   "tick_rate": 10,
   "start_countdown_ticks": 20,
   "max_duration_ticks": 12000,
-  "engagement_range": 60,
-  "disengage_range": 90,
+  "engagement_margin": 10,
+  "disengage_margin": 40,
+  "division_radius": 25,
+  "division_radius_reference_units": 3000,
+  "division_radius_exponent": 0.75,
+  "division_radius_min": 10,
+  "division_radius_max": 60,
+  "separation_iterations": 2,
+  "stall_ticks": 15,
+  "assist_radius": 350,
+  "assist_check_ticks": 5,
+  "assist_while_defending": false,
   "combat_round_ticks": 10,
   "destroyed_unit_threshold": 100,
   "rout_morale_threshold": 20,
@@ -14,6 +24,12 @@
   "fatigue_move_per_second": 0.5,
   "fatigue_recovery_per_second": 1.0,
   "retreat_speed_multiplier": 1.2,
+  "min_split_units": 300,
+  "merge_margin": 10,
+  "path_recompute_distance": 40,
+  "formation_change_seconds": 3,
+  "reform_penalty": 0.75,
+  "reform_speed_factor": 0.5,
   "min_fatigue_speed_factor": 0.6,
   "combat": {
     "base_casualty_rate": 0.02,
@@ -26,6 +42,7 @@
     "defend_defense_bonus": 1.25,
     "attacking_attack_bonus": 1.1,
     "retreating_attack_factor": 0.5,
-    "retreating_defense_factor": 0.7
+    "retreating_defense_factor": 0.7,
+    "volley_casualty_factor": 0.6
   }
 }

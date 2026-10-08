@@ -7,4 +7,6 @@ extends CanvasLayer
 @onready var division_panel: DivisionPanel = $DivisionPanel
 @onready var event_log: EventLog = $EventLog
 @onready var debug_overlay: DebugOverlay = $DebugOverlay
+@onready var action_menu: DivisionActionMenu = $ActionMenu
+@onready var selection_box: SelectionBox = $SelectionBox
 @onready var game_over: GameOverPanel = $GameOverPanel

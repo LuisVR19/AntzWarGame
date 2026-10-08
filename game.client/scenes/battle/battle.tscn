@@ -1,33 +1,63 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/battle/battle_controller.gd" id="1_controller"]
-[ext_resource type="Script" path="res://scripts/battle/map_view.gd" id="2_map_view"]
-[ext_resource type="Script" path="res://scripts/battle/battle_layer.gd" id="3_battle_layer"]
-[ext_resource type="Script" path="res://scripts/battle/division_layer.gd" id="4_division_layer"]
-[ext_resource type="Script" path="res://scripts/battle/battle_camera.gd" id="5_camera"]
-[ext_resource type="Script" path="res://scripts/battle/selection_manager.gd" id="6_selection"]
-[ext_resource type="Script" path="res://scripts/battle/battle_input.gd" id="7_input"]
-[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="8_hud"]
+[ext_resource type="Resource" path="res://resources/visual_config.tres" id="2_config"]
+[ext_resource type="Script" path="res://scripts/battle/map_view.gd" id="3_map_view"]
+[ext_resource type="Script" path="res://scripts/battle/ground_marks.gd" id="4_marks"]
+[ext_resource type="Script" path="res://scripts/battle/decoration_layer.gd" id="5_decorations"]
+[ext_resource type="Script" path="res://scripts/battle/map_object_layer.gd" id="6_objects"]
+[ext_resource type="PackedScene" path="res://scenes/units/building_view.tscn" id="7_building"]
+[ext_resource type="PackedScene" path="res://scenes/units/resource_view.tscn" id="8_resource"]
+[ext_resource type="Script" path="res://scripts/battle/division_layer.gd" id="9_division_layer"]
+[ext_resource type="Script" path="res://scripts/battle/battle_layer.gd" id="10_battle_layer"]
+[ext_resource type="Script" path="res://scripts/battle/battle_camera.gd" id="11_camera"]
+[ext_resource type="Script" path="res://scripts/battle/selection_manager.gd" id="12_selection"]
+[ext_resource type="Script" path="res://scripts/battle/battle_input.gd" id="13_input"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="14_hud"]
 
 [node name="Battle" type="Node2D"]
 script = ExtResource("1_controller")
+visual_config = ExtResource("2_config")
 
-[node name="MapView" type="Node2D" parent="."]
-script = ExtResource("2_map_view")
+[node name="Map" type="Node2D" parent="."]
+script = ExtResource("3_map_view")
 
-[node name="BattleLayer" type="Node2D" parent="."]
-script = ExtResource("3_battle_layer")
+[node name="Ground" type="TileMapLayer" parent="Map"]
 
-[node name="DivisionLayer" type="Node2D" parent="."]
-script = ExtResource("4_division_layer")
+[node name="GroundMarks" type="Node2D" parent="Map"]
+script = ExtResource("4_marks")
+
+[node name="World" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="Decorations" type="Node2D" parent="World"]
+y_sort_enabled = true
+script = ExtResource("5_decorations")
+
+[node name="Buildings" type="Node2D" parent="World"]
+y_sort_enabled = true
+script = ExtResource("6_objects")
+view_scene = ExtResource("7_building")
+
+[node name="Resources" type="Node2D" parent="World"]
+y_sort_enabled = true
+script = ExtResource("6_objects")
+view_scene = ExtResource("8_resource")
+
+[node name="Units" type="Node2D" parent="World"]
+y_sort_enabled = true
+script = ExtResource("9_division_layer")
+
+[node name="Effects" type="Node2D" parent="."]
+script = ExtResource("10_battle_layer")
 
 [node name="Camera" type="Camera2D" parent="."]
-script = ExtResource("5_camera")
+script = ExtResource("11_camera")
 
 [node name="SelectionManager" type="Node" parent="."]
-script = ExtResource("6_selection")
+script = ExtResource("12_selection")
 
 [node name="BattleInput" type="Node2D" parent="."]
-script = ExtResource("7_input")
+script = ExtResource("13_input")
 
-[node name="HUD" parent="." instance=ExtResource("8_hud")]
+[node name="HUD" parent="." instance=ExtResource("14_hud")]

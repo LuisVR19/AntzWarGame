@@ -15,6 +15,10 @@ const ORDER_ATTACK := "order_attack"
 const ORDER_DEFEND := "order_defend"
 const ORDER_RETREAT := "order_retreat"
 const ORDER_HOLD := "order_hold"
+const ORDER_SPLIT := "order_split"
+const ORDER_MERGE := "order_merge"
+const CYCLE_FORMATION := "cycle_formation"
+const SELECT_ALL := "select_all"
 
 ## Hotkey action -> Order type.
 const ORDER_HOTKEYS := {
@@ -23,6 +27,8 @@ const ORDER_HOTKEYS := {
 	ORDER_DEFEND: "DEFEND",
 	ORDER_RETREAT: "RETREAT",
 	ORDER_HOLD: "HOLD",
+	ORDER_SPLIT: "SPLIT",
+	ORDER_MERGE: "MERGE",
 }
 
 
@@ -39,6 +45,15 @@ static func ensure() -> void:
 	_add(ORDER_DEFEND, [KEY_3])
 	_add(ORDER_RETREAT, [KEY_4])
 	_add(ORDER_HOLD, [KEY_5])
+	_add(ORDER_SPLIT, [KEY_6])
+	_add(ORDER_MERGE, [KEY_7])
+	_add(CYCLE_FORMATION, [KEY_F])
+	if not InputMap.has_action(SELECT_ALL):  # Ctrl+A
+		InputMap.add_action(SELECT_ALL)
+		var ev := InputEventKey.new()
+		ev.physical_keycode = KEY_A
+		ev.ctrl_pressed = true
+		InputMap.action_add_event(SELECT_ALL, ev)
 
 
 static func _add(action: String, keys: Array) -> void:

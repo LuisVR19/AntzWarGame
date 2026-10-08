@@ -1,7 +1,7 @@
 class_name DebugOverlay
 extends PanelContainer
 ## Debug info (F3): FPS, division count, tick, source, cursor terrain...
-## Per-division debug text is drawn in the world by DivisionOverlay.
+## Per-division debug text is drawn in the world by EntityOverlay.
 
 var _label: Label
 

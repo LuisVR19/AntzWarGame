@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="VisualConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/core/visual_config.gd" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")
+tile_width = 64.0
+tile_height = 32.0
+show_grid = true
+camera_min_zoom = 0.45
+camera_max_zoom = 3.0
+camera_zoom_step = 1.12
+camera_move_speed = 900.0
+camera_edge_scroll_enabled = true
+camera_edge_scroll_margin = 12.0
+camera_drag_threshold = 6.0
+unit_scale = 1.0
+unit_radius = 20.0
+unit_size_reference = 2000.0
+unit_size_exponent = 0.75
+unit_radius_min = 8.0
+unit_radius_max = 56.0
+unit_soldiers_per_ant = 60.0
+building_scale = 1.0
+building_height_per_tile = 18.0
+resource_scale = 1.0
+decoration_scale = 1.0
+label_scale_min = 0.6
+label_scale_max = 2.5
+selection_line_width = 2.5

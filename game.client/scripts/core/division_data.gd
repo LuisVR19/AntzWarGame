@@ -21,6 +21,11 @@ var path: PackedVector2Array = PackedVector2Array()
 var routed := false
 var in_battle := false
 var terrain := ""
+var formation := Formations.DEFAULT
+var facing := 0.0  # radians, world space
+var reforming := false
+var unit_type := UnitTypes.DEFAULT
+var radius := 0.0  # ground radius in world units (0 = unknown, e.g. Go server)
 
 
 static func from_protocol(raw: Dictionary) -> DivisionData:
@@ -41,6 +46,11 @@ static func from_protocol(raw: Dictionary) -> DivisionData:
 	d.routed = bool(raw.get("routed", false))
 	d.in_battle = bool(raw.get("in_battle", false))
 	d.terrain = GameTypes.from_wire(str(raw.get("terrain", "")))
+	d.formation = GameTypes.from_wire(str(raw.get("formation", GameTypes.to_wire(Formations.DEFAULT))))
+	d.facing = float(raw.get("facing", 0.0))
+	d.reforming = bool(raw.get("reforming", false))
+	d.radius = float(raw.get("radius", 0.0))
+	d.unit_type = GameTypes.from_wire(str(raw.get("unit_type", GameTypes.to_wire(UnitTypes.DEFAULT))))
 	var order_raw: Variant = raw.get("order")
 	if order_raw is Dictionary:
 		d.order = Order.from_protocol(order_raw)

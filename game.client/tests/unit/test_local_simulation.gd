@@ -162,14 +162,80 @@ func test_order_changes_while_moving() -> bool:
 	return done()
 
 
-func test_water_blocks_straight_line() -> bool:
+func test_move_routes_around_river() -> bool:
 	var sim := _sim()
 	var d = _div(sim, "division-1")
 	_place(sim, "division-1", Vector2(900, 600))
-	_move(sim, P1, "division-1", Vector2(1100, 600))
-	var msgs := _run_until(sim, func() -> bool: return d.order.is_empty() and sim.tick > 1, 200)
-	check(not _find(msgs, "division_updated", "reason", "blocked").is_empty(), "evento blocked")
-	check(d.position.x < 950.0, "se detiene antes del río")
+	_move(sim, P1, "division-1", Vector2(1100, 600))  # the river is in between
+	sim.step()
+	check(d.path.size() >= 2, "planifica una ruta con varios tramos")
+	check(sim._division_dto(d).get("path", []).size() >= 2, "la ruta viaja al cliente en 'path'")
+	var msgs := _run_until(sim, func() -> bool: return d.order.is_empty(), 3000)
+	check(_find(msgs, "division_updated", "reason", "blocked").is_empty(), "no se queda atascada")
+	check(not _find(msgs, "division_updated", "reason", "arrived").is_empty(), "llega rodeando el río")
+	check_near(d.position.distance_to(Vector2(1100, 600)), 0.0, 1.0, "está en el destino")
+	return done()
+
+
+func test_attack_across_river_reaches_target() -> bool:
+	var sim := _sim()
+	_place(sim, "division-1", Vector2(700, 600))
+	_place(sim, "division-2", Vector2(1300, 600))
+	sim.handle(P1, Order.attack("division-1", "division-2").to_message())
+	_run_until(sim, func() -> bool: return not sim.battles.is_empty(), 3000)
+	check(not sim.battles.is_empty(), "rodea el río y entra en combate")
+	return done()
+
+
+func test_split_division() -> bool:
+	var sim := _sim()
+	var d = _div(sim, "division-1")
+	check(sim.handle(P1, Order.split("division-1").to_message()).is_empty(), "dividir se acepta sin errores")
+	var msgs := sim.step()
+	var ev := _find(msgs, "division_split")
+	check(not ev.is_empty(), "evento division_split")
+	check_eq(ev.get("new_division_id"), "division-3", "id nuevo")
+	var n = _div(sim, "division-3")
+	check_eq(n.player_id, P1, "mismo dueño")
+	check_eq(d.unit_count, 1500, "la original se queda la mitad")
+	check_eq(n.unit_count, 1500, "la nueva recibe la otra mitad")
+	check_eq(d.max_unit_count + n.max_unit_count, 3000, "el máximo se reparte")
+	check_eq(n.attack, d.attack, "mismas estadísticas")
+	check_eq(n.name, "Prueba (2)", "nombre derivado")
+	check(sim.map.is_passable(n.position) and n.position != d.position, "aparece al lado, en terreno transitable")
+	check_eq(sim.snapshot()["divisions"].size(), 3, "el snapshot la incluye")
+	check_eq(_error_code(sim.handle(P2, Order.split("division-1").to_message())), "not_owner", "solo el dueño")
+	d.unit_count = 500
+	check_eq(_error_code(sim.handle(P1, Order.split("division-1").to_message())), "division_too_small", "mínimo de unidades")
+	return done()
+
+
+func test_merge_divisions() -> bool:
+	var sim := _sim()
+	sim.handle(P1, Order.split("division-1").to_message())
+	sim.step()
+	var a = _div(sim, "division-1")
+	var b = _div(sim, "division-3")
+	_place(sim, "division-3", a.position + Vector2(300, 0))
+	b.attack = 20.0  # both have 1500 units: the merged attack is the average
+	check_eq(_error_code(sim.handle(P1, Order.merge("division-1", "division-2").to_message())), "target_not_friendly", "no con el rival")
+	check_eq(_error_code(sim.handle(P1, Order.merge("division-1", "division-1").to_message())), "merge_self", "no consigo misma")
+	var reply := sim.handle(P1, Order.merge("division-1", "division-3").to_message())
+	check_eq(reply[0]["type"], "order_accepted", "orden de unión aceptada")
+	sim.step()
+	check_eq(a.state, GameTypes.STATE_MOVING, "camina hacia la otra división")
+	var msgs := _run_until(sim, func() -> bool: return not sim._by_id.has("division-3"), 1000)
+	var ev := _find(msgs, "divisions_merged")
+	check(not ev.is_empty(), "evento divisions_merged")
+	check_eq(ev.get("merged_division_name"), "Prueba (2)", "nombre de la absorbida en el evento")
+	check_eq(a.unit_count, 3000, "suma de unidades")
+	check_eq(a.max_unit_count, 3000, "suma del máximo")
+	check_near(a.attack, 15.0, 0.01, "estadísticas promediadas por unidades")
+	check_eq(a.state, GameTypes.STATE_IDLE, "queda en espera")
+	var ids := []
+	for dto in sim.snapshot()["divisions"]:
+		ids.append(dto["id"])
+	check(not ids.has("division-3"), "la absorbida desaparece del snapshot")
 	return done()
 
 
@@ -339,3 +405,57 @@ func _nearest_ford(from: Vector2) -> Vector2:
 	var north := Vector2(975, 300)
 	var south := Vector2(975, 900)
 	return north if from.distance_to(north) < from.distance_to(south) else south
+
+
+func test_formation_change_takes_time() -> bool:
+	var sim := _sim()
+	var d = _div(sim, "division-1")
+	check_eq(d.formation, Formations.LINE, "empieza en línea")
+	check_eq(_error_code(sim.handle(P2, Order.change_formation("division-1", Formations.WEDGE).to_message())), "not_owner", "solo el dueño")
+	check_eq(_error_code(sim.handle(P1, {"type": "set_formation", "division_id": "division-1", "formation": "tortuga"})),
+		"invalid_formation", "formación desconocida")
+	check(sim.handle(P1, Order.change_formation("division-1", Formations.WEDGE).to_message()).is_empty(), "cambio aceptado")
+	var msgs := sim.step()
+	check_eq(d.formation, Formations.WEDGE, "se aplica en el siguiente tick")
+	check(d.reform_ticks > 0, "empieza a reorganizarse")
+	check(sim._division_dto(d)["reforming"], "el cliente sabe que se reorganiza")
+	check_eq(sim._division_dto(d)["formation"], "wedge", "la formación viaja en minúsculas")
+	check(not _find(msgs, "division_updated", "reason", "formation_changed").is_empty(), "evento formation_changed")
+	var slow := sim._speed_multiplier(d)
+	msgs = _run(sim, 40)
+	check(not _find(msgs, "division_updated", "reason", "formation_ready").is_empty(), "evento formation_ready")
+	check_eq(d.reform_ticks, 0, "termina de reorganizarse")
+	check(sim._speed_multiplier(d) > slow, "reorganizándose es más lenta")
+	check_eq(_error_code(sim.handle(P1, Order.change_formation("division-1", Formations.WEDGE).to_message())), "same_formation", "ya está en cuña")
+	return done()
+
+
+func test_facing_follows_movement() -> bool:
+	var sim := _sim()
+	var d = _div(sim, "division-1")
+	check_near(d.facing, 0.0, 0.001, "el azul empieza mirando al este (al enemigo)")
+	check_near(absf(_div(sim, "division-2").facing), PI, 0.001, "el rojo empieza mirando al oeste")
+	_place(sim, "division-1", Vector2(500, 1100))
+	_move(sim, P1, "division-1", Vector2(500, 950))
+	_run(sim, 10)
+	check_near(d.facing, -PI / 2.0, 0.01, "mira hacia donde marcha (norte)")
+	return done()
+
+
+func test_flank_attack_and_turning() -> bool:
+	var sim := _sim()
+	var defender = _div(sim, "division-1")
+	var attacker = _div(sim, "division-2")
+	defender.formation = Formations.SHIELD_WALL  # turns only 20 degrees per second
+	_place(sim, "division-1", Vector2(500, 950))  # faces east
+	_place(sim, "division-2", Vector2(500, 1100))  # comes from the south
+	sim.handle(P2, Order.attack("division-2", "division-1").to_message())
+	var msgs := _run_until(sim, func() -> bool: return not sim.battles.is_empty(), 300)
+	var started := _find(msgs, "battle_started")
+	check_eq(started.get("defender_id"), "division-1", "el que ataca inicia")
+	check_eq(started.get("defender_exposure"), Formations.FLANK, "el golpe llega por el flanco")
+	msgs = _run(sim, 10)
+	check_eq(_find(msgs, "battle_updated").get("defender", {}).get("exposure"), Formations.FLANK, "la ronda informa del flanco")
+	_run(sim, 30)
+	check_eq(sim._exposure(defender, attacker), Formations.FRONT, "el defensor acaba girando para encarar al atacante")
+	return done()

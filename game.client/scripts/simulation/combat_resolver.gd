@@ -4,7 +4,11 @@ extends RefCounted
 ## the Go server's SimpleEngine:
 ##   attack_power  = attack  * morale_mod * terrain_attack  * exp_mod * fatigue_mod * stance
 ##   defense_power = defense * morale_mod * terrain_defense * exp_mod * fatigue_mod * stance
-##   losses(B) = units(A) * base_rate * clamp(attack_power(A) / defense_power(B))
+##   losses(B) = fighting(A) * base_rate * clamp(attack_power(A) / defense_power(B))
+## Local-only extras (formations): attack/defense are also multiplied by
+## formation_attack / formation_defense, and only `frontage` soldiers fight at
+## once (fighting = min(units, frontage)); the rest is a reserve that only
+## softens morale losses. Without those keys it behaves like the server.
 
 const STANCE_ATTACKING := "ATTACKING"
 const STANCE_DEFENDING := "DEFENDING"  # explicit DEFEND order
@@ -22,6 +26,7 @@ var defend_bonus := 1.25
 var attacking_bonus := 1.1
 var retreat_attack := 0.5
 var retreat_defense := 0.7
+var volley_factor := 0.6
 
 
 func _init(params: Dictionary = {}) -> void:
@@ -36,6 +41,7 @@ func _init(params: Dictionary = {}) -> void:
 	attacking_bonus = float(params.get("attacking_attack_bonus", attacking_bonus))
 	retreat_attack = float(params.get("retreating_attack_factor", retreat_attack))
 	retreat_defense = float(params.get("retreating_defense_factor", retreat_defense))
+	volley_factor = float(params.get("volley_casualty_factor", volley_factor))
 
 
 static func morale_modifier(morale: float) -> float:
@@ -55,6 +61,7 @@ static func fatigue_modifier(fatigue: float) -> float:
 func attack_power(c: Dictionary) -> float:
 	var v: float = c.attack * morale_modifier(c.morale) * c.terrain_attack \
 		* experience_modifier(c.experience) * fatigue_modifier(c.fatigue)
+	v *= float(c.get("formation_attack", 1.0))
 	if c.stance == STANCE_ATTACKING:
 		v *= attacking_bonus
 	elif c.stance == STANCE_RETREATING:
@@ -65,6 +72,7 @@ func attack_power(c: Dictionary) -> float:
 func defense_power(c: Dictionary) -> float:
 	var v: float = c.defense * morale_modifier(c.morale) * c.terrain_defense \
 		* experience_modifier(c.experience) * fatigue_modifier(c.fatigue)
+	v *= float(c.get("formation_defense", 1.0))
 	if c.stance == STANCE_DEFENDING:
 		v *= defend_bonus
 	elif c.stance == STANCE_RETREATING:
@@ -79,12 +87,31 @@ func resolve(a: Dictionary, b: Dictionary) -> Dictionary:
 	var def_a := defense_power(a)
 	var atk_b := attack_power(b)
 	var def_b := defense_power(b)
-	var loss_b := _casualties(int(a.unit_count), atk_a, def_b, int(b.unit_count))
-	var loss_a := _casualties(int(b.unit_count), atk_b, def_a, int(a.unit_count))
+	var loss_b := _casualties(fighting_units(a), atk_a, def_b, int(b.unit_count))
+	var loss_a := _casualties(fighting_units(b), atk_b, def_a, int(a.unit_count))
 	return {
 		"a": _side(int(a.unit_count), loss_a, atk_a, def_a),
 		"b": _side(int(b.unit_count), loss_b, atk_b, def_b),
 	}
+
+
+## A ranged volley (archers): only the target suffers, with casualties scaled
+## by volley_casualty_factor. Returns the target's side
+## {losses, morale_delta, fatigue_delta, experience_delta, attack, defense}.
+func resolve_volley(shooter: Dictionary, target: Dictionary) -> Dictionary:
+	var atk := attack_power(shooter)
+	var def := defense_power(target)
+	var losses := _casualties(fighting_units(shooter), atk * volley_factor, def, int(target.unit_count))
+	var side := _side(int(target.unit_count), losses, atk, def)
+	side["fatigue_delta"] = 0.0
+	side["experience_delta"] = 0.0
+	return side
+
+
+## Soldiers that can strike at once: the formation's frontage caps them.
+static func fighting_units(c: Dictionary) -> int:
+	var units := int(c.unit_count)
+	return mini(units, int(c.get("frontage", units)))
 
 
 func _casualties(attacker_units: int, atk: float, def: float, defender_units: int) -> int:

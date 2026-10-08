@@ -1,0 +1,7 @@
+{
+  "_comment": "Tipos de recurso del mapa. asset = textura opcional que sustituye al placeholder si existe.",
+  "GOLD":  { "name": "Oro",    "asset": "res://assets/resources/gold.svg" },
+  "WOOD":  { "name": "Madera", "asset": "res://assets/resources/wood.svg" },
+  "STONE": { "name": "Piedra", "asset": "res://assets/resources/stone.svg" },
+  "FOOD":  { "name": "Comida", "asset": "res://assets/resources/food.svg" }
+}
