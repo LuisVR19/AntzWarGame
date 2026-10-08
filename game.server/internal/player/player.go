@@ -18,4 +18,7 @@ type Player struct {
 	SessionToken string `json:"-"`
 	Ready        bool   `json:"ready"`
 	Connected    bool   `json:"connected"`
+	// Bot players are controlled by the server (internal/ai) and have no
+	// connection of their own.
+	Bot bool `json:"bot"`
 }

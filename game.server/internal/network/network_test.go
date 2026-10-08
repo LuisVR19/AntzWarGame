@@ -277,3 +277,77 @@ func TestWebSocketProtocolErrors(t *testing.T) {
 		t.Fatalf("got %+v", e)
 	}
 }
+
+// TestWebSocketAIGame plays against the server bot: one connection only.
+func TestWebSocketAIGame(t *testing.T) {
+	srv := newTestServer(t)
+	c := dial(t, srv)
+
+	c.send(map[string]any{"type": "create_ai_game", "request_id": "ai1", "player_name": "Alice"})
+	var created GameJoinedMessage
+	c.waitFor(MsgGameCreated, &created)
+	if created.RequestID != "ai1" || created.Side != 0 || created.Map.Cols == 0 || created.SessionToken == "" {
+		t.Fatalf("game_created: %+v", created)
+	}
+	var lobby LobbyUpdatedMessage
+	c.waitFor(MsgLobbyUpdated, &lobby)
+	var bot PlayerDTO
+	for _, p := range lobby.Players {
+		if p.Bot {
+			bot = p
+		}
+	}
+	if len(lobby.Players) != 2 || bot.ID == "" || bot.ID == created.PlayerID || !bot.Ready || bot.Side != 1 {
+		t.Fatalf("the lobby must contain a ready bot on side 1: %+v", lobby.Players)
+	}
+
+	c.send(map[string]any{"type": "create_ai_game", "request_id": "dup"})
+	var dup ErrorMessage
+	c.waitFor(MsgError, &dup)
+	if dup.Code != "already_in_game" {
+		t.Fatalf("second create_ai_game: %+v", dup)
+	}
+	// Nobody else can take the bot's seat.
+	other := dial(t, srv)
+	other.send(map[string]any{"type": "join_game", "game_id": created.GameID, "player_name": "Eve"})
+	var full ErrorMessage
+	other.waitFor(MsgError, &full)
+	if full.Code != "game_full" {
+		t.Fatalf("join an AI game: %+v", full)
+	}
+
+	// Only the human's ready is needed.
+	c.send(map[string]any{"type": "ready"})
+	var started GameStartedMessage
+	c.waitFor(MsgGameStarted, &started)
+	var mine DivisionDTO
+	for _, d := range started.State.Divisions {
+		if d.PlayerID == created.PlayerID {
+			mine = d
+		}
+	}
+	if len(started.State.Divisions) != 4 || mine.ID == "" {
+		t.Fatalf("initial state: %+v", started.State)
+	}
+
+	// The human plays normally...
+	c.send(map[string]any{"type": "hold_division", "request_id": "h1", "division_id": mine.ID})
+	var acc OrderAcceptedMessage
+	c.waitFor(MsgOrderAccepted, &acc)
+	if acc.RequestID != "h1" {
+		t.Fatalf("order_accepted %+v", acc)
+	}
+	// ...while the bot gives its own orders and goes to fight.
+	for {
+		var upd DivisionUpdatedMessage
+		c.waitFor(MsgDivisionUpdated, &upd)
+		if upd.Division.PlayerID == bot.ID && upd.Reason == "order" {
+			if upd.Division.Order != nil {
+				t.Fatal("the bot's order details must not be sent to the human")
+			}
+			break
+		}
+	}
+	var bs BattleStartedMessage
+	c.waitFor(MsgBattleStarted, &bs)
+}

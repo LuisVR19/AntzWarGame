@@ -68,6 +68,11 @@ func source_name() -> String:
 	return "abstract"
 
 
+## Status shown while the session is being set up (before the first state).
+func loading_text() -> String:
+	return "Conectando..."
+
+
 ## Sends a client -> server message. Virtual.
 func _send(_msg: Dictionary) -> void:
 	push_warning("GameStateSource._send not implemented")

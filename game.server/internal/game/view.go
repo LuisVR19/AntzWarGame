@@ -72,6 +72,7 @@ type PlayerView struct {
 	Side      player.Side
 	Ready     bool
 	Connected bool
+	Bot       bool
 }
 
 // GameView is a snapshot of the game as seen by one viewer.
@@ -102,7 +103,7 @@ func (g *Game) ViewFor(viewer player.ID) GameView {
 		FinishReason:   g.FinishReason,
 	}
 	for _, p := range g.Players() {
-		v.Players = append(v.Players, PlayerView{ID: p.ID, Name: p.Name, Side: p.Side, Ready: p.Ready, Connected: p.Connected})
+		v.Players = append(v.Players, PlayerView{ID: p.ID, Name: p.Name, Side: p.Side, Ready: p.Ready, Connected: p.Connected, Bot: p.Bot})
 	}
 	for _, d := range g.divisionOrder {
 		if dv, ok := g.DivisionViewFor(viewer, d.ID); ok {

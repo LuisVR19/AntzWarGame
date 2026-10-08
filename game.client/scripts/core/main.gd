@@ -1,6 +1,6 @@
 extends Node
 ## Application entry: shows the menu and swaps in the battle scene with the
-## chosen game source (local simulation or Go server).
+## chosen game source (local simulation, Go server or Go server vs its AI).
 
 const BATTLE_SCENE := preload("res://scenes/battle/battle.tscn")
 
@@ -12,6 +12,7 @@ var _battle: BattleController
 func _ready() -> void:
 	menu.local_requested.connect(_start_local)
 	menu.online_requested.connect(_start_online)
+	menu.ai_requested.connect(_start_vs_ai)
 
 
 func _start_local(map_id: String, army_id: String) -> void:
@@ -23,6 +24,10 @@ func _start_local(map_id: String, army_id: String) -> void:
 
 func _start_online(url: String, player_name: String, game_id: String) -> void:
 	_start(NetworkGameState.new(url, player_name, game_id))
+
+
+func _start_vs_ai(url: String, player_name: String) -> void:
+	_start(NetworkGameState.new(url, player_name, "", true))
 
 
 func _start(source: GameStateSource) -> void:

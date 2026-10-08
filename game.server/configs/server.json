@@ -116,5 +116,20 @@
       "defense_modifier": 0,
       "visibility_modifier": 1
     }
+  },
+  "ai": {
+    "decision_interval_ticks": 10,
+    "base_threat_radius": 500,
+    "home_radius": 250,
+    "retreat_strength_ratio": 0.3,
+    "retreat_morale": 30,
+    "recover_morale": 60,
+    "min_attack_odds": 0.8,
+    "keep_attack_odds": 0.5,
+    "regroup_radius": 300,
+    "max_attackers_per_target": 2,
+    "target_switch_factor": 1.5,
+    "move_tolerance": 100,
+    "reissue_cooldown_ticks": 50
   }
 }

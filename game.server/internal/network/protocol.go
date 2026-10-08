@@ -10,6 +10,7 @@ package network
 // Client -> server.
 const (
 	MsgCreateGame      = "create_game"
+	MsgCreateAIGame    = "create_ai_game"
 	MsgJoinGame        = "join_game"
 	MsgReady           = "ready"
 	MsgMoveDivision    = "move_division"
@@ -48,6 +49,13 @@ type Envelope struct {
 // ---------------------------------------------------------------------------
 
 type CreateGameRequest struct {
+	Envelope
+	PlayerName string `json:"player_name"`
+}
+
+// CreateAIGameRequest creates a game against a server-controlled bot. The
+// reply is game_created, like create_game.
+type CreateAIGameRequest struct {
 	Envelope
 	PlayerName string `json:"player_name"`
 }
@@ -133,6 +141,7 @@ type PlayerDTO struct {
 	Side      int    `json:"side"`
 	Ready     bool   `json:"ready"`
 	Connected bool   `json:"connected"`
+	Bot       bool   `json:"bot,omitempty"`
 }
 
 type OrderDTO struct {

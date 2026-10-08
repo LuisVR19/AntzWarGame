@@ -9,6 +9,7 @@ Frontend del juego de estrategia 1v1 de ejércitos de hormigas, en **2D isométr
 1. Godot 4.3+ → *Import* → `project.godot` → F5.
 2. **Partida local:** elige el **mapa** (pequeño 40x24 o grande 80x48) y el **tamaño del ejército** (pequeño, mediano o grande) y pulsa "Partida local (sin servidor)". Tab cambia el jugador controlado.
 3. **Contra el servidor:** `cd ../game.server && go run ./cmd/server`. En el cliente, "Conectar" con el ID vacío crea la partida; el segundo jugador introduce ese ID. Ambos pulsan "¡Listo!".
+4. **Contra la IA:** con el servidor en marcha, pulsa "Jugar contra IA" (usa la URL del servidor del menú) y luego "¡Listo!". Un bot del servidor controla el ejército rival.
 
 ## Tests
 

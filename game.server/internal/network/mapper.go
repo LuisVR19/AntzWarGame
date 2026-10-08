@@ -62,7 +62,7 @@ func toDivision(d game.DivisionView) DivisionDTO {
 func toPlayers(v *game.GameView) []PlayerDTO {
 	out := make([]PlayerDTO, 0, len(v.Players))
 	for _, p := range v.Players {
-		out = append(out, PlayerDTO{ID: string(p.ID), Name: p.Name, Side: int(p.Side), Ready: p.Ready, Connected: p.Connected})
+		out = append(out, PlayerDTO{ID: string(p.ID), Name: p.Name, Side: int(p.Side), Ready: p.Ready, Connected: p.Connected, Bot: p.Bot})
 	}
 	return out
 }

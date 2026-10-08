@@ -509,3 +509,25 @@ Tests: 72/72. Nuevo `tests/unit/test_assist_ai.gd`:
 - con MANTENER y con DEFENDER se queda quieta;
 - lejos no reacciona;
 - el cliente reconoce la orden automática.
+
+
+## 19. Modo «Jugar contra IA» (2026-10-08, sin Godot)
+
+La IA vive **solo en el servidor Go** (`game.server/internal/ai`, ver su README, sección "Partida contra la IA"). El cliente solo pide la partida y la dibuja como cualquier otra.
+
+**Flujo:** menú → "Jugar contra IA" → `NetworkGameState(url, nombre, "", vs_ai = true)` → al conectar envía `create_ai_game` → `game_created` + `lobby_updated` (el bot aparece con `bot: true`, ya listo) → el jugador pulsa "¡Listo!" → `game_started` → partida normal → `game_finished` con el panel de resultado de siempre → "Volver al menú".
+
+**Cambios en el cliente:**
+- `Protocol.CREATE_AI_GAME` / `Protocol.create_ai_game()`.
+- `NetworkGameState`: parámetro `vs_ai`. Un `error` recibido antes de `game_created`/`game_joined` (por ejemplo `create_failed`) se trata como fallo de sesión (`connection_lost` con un texto comprensible) y no como orden rechazada. Si el servidor no está disponible, el aviso es "No se pudo conectar con el servidor … ¿Está en ejecución?". Las dos mejoras sirven también para "Conectar".
+- `GameStateSource.loading_text()` + `TopBar.set_status_text()`: la barra superior muestra "Creando partida contra la IA..." hasta que llega el primer estado.
+- `MainMenu`: botón "Jugar contra IA" (señal `ai_requested`) y bloqueo de dobles clics en los tres botones de inicio hasta que el menú vuelve a mostrarse.
+- `BattleState.set_players` conserva el campo `bot`.
+
+**Verificado sin Godot:** `gdparse` y `gdlint` (gdtoolkit 4.5, con el `gdlintrc` del proyecto) sin errores en los archivos tocados. El único aviso es el `unused-argument` de `battle_controller.gd`, que ya existía. Un script Python envió al servidor real los mismos mensajes que genera el cliente (`create_ai_game`, `ready`, `hold_division`). Respuesta completa, bot en el lobby y divisiones del bot moviéndose: OK.
+
+**Pendiente en la máquina con Godot:**
+1. `godot --headless --path . --editor --quit` y luego `godot --headless --path . --script res://tests/run_tests.gd`. Nuevos tests: `tests/unit/test_ai_mode.gd` (mensaje, solicitud al conectar, errores antes de la sesión, bot en el lobby, botón sin dobles solicitudes) y `tests/integration/test_ai_battle_flow.gd` (escena real con un socket falso: carga → ready → órdenes → estado → derrota → menú, y servidor caído sin bloquear el cliente). Puntos a vigilar: los `class FakeNet extends NetworkManager` internos (firma de los métodos sobrescritos) y el `super(...)` de `FakeAiSource._init`.
+2. Prueba manual: `go run ./cmd/server`, "Jugar contra IA", "¡Listo!". El ejército rival debe avanzar solo, combatir, retirarse si queda débil y la partida debe terminar con el panel de resultado. Probar también con el servidor apagado (debe aparecer el aviso y poder volver al menú).
+3. Comprobar que "Conectar" (dos jugadores) sigue funcionando igual.
+

@@ -5,6 +5,8 @@ extends RefCounted
 
 # Client -> server
 const CREATE_GAME := "create_game"
+## Creates a game against the server-controlled bot (reply: game_created).
+const CREATE_AI_GAME := "create_ai_game"
 const JOIN_GAME := "join_game"
 const READY := "ready"
 const MOVE_DIVISION := "move_division"
@@ -39,6 +41,10 @@ const ERROR := "error"
 
 static func create_game(player_name: String) -> Dictionary:
 	return {"type": CREATE_GAME, "player_name": player_name}
+
+
+static func create_ai_game(player_name: String) -> Dictionary:
+	return {"type": CREATE_AI_GAME, "player_name": player_name}
 
 
 static func join_game(game_id: String, player_name: String, session_token := "") -> Dictionary:

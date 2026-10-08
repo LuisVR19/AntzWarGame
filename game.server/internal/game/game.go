@@ -100,6 +100,17 @@ func New(id string, m *terrain.Map, rules Rules, engine combat.Engine, opts ...O
 
 // AddPlayer adds a player to a waiting game and assigns the first free side.
 func (g *Game) AddPlayer(name, sessionToken string) (*player.Player, error) {
+	return g.addPlayer(name, sessionToken, false)
+}
+
+// AddBot adds a server-controlled player. It takes the last free side (so a
+// human joining afterwards gets side 0), is always ready and is considered
+// connected: it has no WebSocket and never forfeits by disconnection.
+func (g *Game) AddBot(name string) (*player.Player, error) {
+	return g.addPlayer(name, "", true)
+}
+
+func (g *Game) addPlayer(name, sessionToken string, bot bool) (*player.Player, error) {
 	if g.Status != StatusWaiting {
 		return nil, newErr(CodeInvalidState, "game is %s", g.Status)
 	}
@@ -110,17 +121,22 @@ func (g *Game) AddPlayer(name, sessionToken string) (*player.Player, error) {
 	for _, p := range g.players {
 		used[p.Side] = true
 	}
-	side := player.Side(0)
+	side, step, prefix := player.Side(0), player.Side(1), "player"
+	if bot {
+		side, step, prefix = MaxPlayers-1, -1, "bot"
+	}
 	for used[side] {
-		side++
+		side += step
 	}
 	g.playerSeq++
 	p := &player.Player{
-		ID:           player.ID(fmt.Sprintf("player-%d", g.playerSeq)),
+		ID:           player.ID(fmt.Sprintf("%s-%d", prefix, g.playerSeq)),
 		Name:         name,
 		Side:         side,
 		SessionToken: sessionToken,
+		Ready:        bot,
 		Connected:    true,
+		Bot:          bot,
 	}
 	g.players[p.ID] = p
 	g.playerOrder = append(g.playerOrder, p.ID)

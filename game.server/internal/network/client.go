@@ -20,6 +20,9 @@ import (
 
 const maxPlayerNameLen = 32
 
+// botName is the display name of the server-controlled opponent.
+const botName = "IA"
+
 // client is one WebSocket connection. It runs two goroutines:
 //   - readLoop: decodes messages and calls the Room (owns room/playerID)
 //   - writeLoop: the only writer to the socket
@@ -180,6 +183,11 @@ func (c *client) dispatch(data []byte) {
 		if c.decode(data, &m, env) {
 			c.handleCreate(ctx, m)
 		}
+	case MsgCreateAIGame:
+		var m CreateAIGameRequest
+		if c.decode(data, &m, env) {
+			c.handleCreateAI(ctx, m)
+		}
 	case MsgJoinGame:
 		var m JoinGameRequest
 		if c.decode(data, &m, env) {
@@ -287,6 +295,34 @@ func (c *client) handleCreate(ctx context.Context, m CreateGameRequest) {
 	}
 	c.room, c.playerID = room, pid
 	c.log.Info("game created by client", "game_id", room.ID(), "player_id", pid)
+}
+
+// handleCreateAI creates a game whose second player is the server bot. The
+// bot joins first (taking side 1) so the human's game_created already shows
+// it in the lobby; the human then sends ready as in a normal game.
+func (c *client) handleCreateAI(ctx context.Context, m CreateAIGameRequest) {
+	if c.room != nil {
+		c.sendError(m.RequestID, "already_in_game", "this connection is already in a game")
+		return
+	}
+	room, err := c.srv.reg.CreateGame()
+	if err != nil {
+		c.sendError(m.RequestID, "create_failed", err.Error())
+		return
+	}
+	if _, err := room.AddBot(ctx, botName); err != nil {
+		room.Close()
+		c.replyErr(m.RequestID, err)
+		return
+	}
+	pid, err := room.Join(ctx, sanitizeName(m.PlayerName), "", m.RequestID, true, c)
+	if err != nil {
+		room.Close()
+		c.replyErr(m.RequestID, err)
+		return
+	}
+	c.room, c.playerID = room, pid
+	c.log.Info("ai game created by client", "game_id", room.ID(), "player_id", pid)
 }
 
 func (c *client) handleJoin(ctx context.Context, m JoinGameRequest) {

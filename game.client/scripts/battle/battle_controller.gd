@@ -85,6 +85,7 @@ func start(p_source: GameStateSource) -> void:
 	hud.division_panel.set_formations_available(source.supports_formations())
 	hud.action_menu.set_formations_available(source.supports_formations())
 	hud.event_log.add_entry("Fuente de partida: %s" % source.source_name(), Palette.LOG_INFO)
+	hud.top_bar.set_status_text(source.loading_text())
 	source.start()
 
 

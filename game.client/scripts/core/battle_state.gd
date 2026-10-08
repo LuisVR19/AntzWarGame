@@ -87,6 +87,7 @@ func set_players(list: Variant) -> void:
 			"side": int(raw.get("side", 0)),
 			"ready": bool(raw.get("ready", false)),
 			"connected": bool(raw.get("connected", true)),
+			"bot": bool(raw.get("bot", false)),
 		})
 
 

@@ -68,6 +68,7 @@ func run() error {
 			SnapshotEveryTicks: cfg.Rooms.SnapshotEveryTicks,
 			WaitingTimeout:     cfg.Rooms.WaitingTimeout(),
 			FinishedRetention:  cfg.Rooms.FinishedRetention(),
+			AI:                 cfg.AI,
 			Logger:             log,
 		}
 	}, cfg.Rooms.MaxGames, log)

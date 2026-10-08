@@ -68,6 +68,11 @@ func set_status(status: String, players_count: int, countdown_seconds: float) ->
 		_status.text = status
 
 
+## Free text status, e.g. while the session is being set up.
+func set_status_text(text: String) -> void:
+	_status.text = text
+
+
 func set_elapsed(seconds: float) -> void:
 	_time.text = "Tiempo " + UiStyle.format_time(seconds)
 

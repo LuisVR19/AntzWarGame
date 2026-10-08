@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"gameserver/internal/ai"
 	"gameserver/internal/game"
 	"gameserver/internal/terrain"
 )
@@ -23,6 +24,8 @@ type Config struct {
 	Log     Log           `json:"log"`
 	Game    game.Rules    `json:"game"`
 	Terrain terrain.Table `json:"terrain"`
+	// AI tunes the server-controlled opponent of create_ai_game.
+	AI ai.Config `json:"ai"`
 }
 
 // Server holds network settings.
@@ -72,6 +75,7 @@ func Default() Config {
 		Log:     Log{Level: "info", Format: "text"},
 		Game:    game.DefaultRules(),
 		Terrain: terrain.DefaultTable(),
+		AI:      ai.DefaultConfig(),
 	}
 }
 
@@ -111,6 +115,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.Terrain.Validate(); err != nil {
+		return err
+	}
+	if err := c.AI.Validate(); err != nil {
 		return err
 	}
 	if c.Server.SendQueueSize <= 0 || c.Server.MaxMessageBytes <= 0 {

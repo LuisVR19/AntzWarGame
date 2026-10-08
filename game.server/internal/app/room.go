@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"gameserver/internal/ai"
 	"gameserver/internal/combat"
 	"gameserver/internal/game"
 	"gameserver/internal/player"
@@ -27,6 +28,8 @@ type RoomConfig struct {
 	WaitingTimeout time.Duration
 	// FinishedRetention keeps finished rooms queryable for a while.
 	FinishedRetention time.Duration
+	// AI tunes the bot added with AddBot. A zero value uses ai.DefaultConfig.
+	AI ai.Config
 	// ManualClock disables the internal ticker; ticks are driven by
 	// Room.Step (tests).
 	ManualClock bool
@@ -47,6 +50,8 @@ type Room struct {
 
 	closing    bool
 	finishedAt time.Time
+	// bot controls the server-side player of a game against the AI.
+	bot *ai.Bot
 }
 
 // NewRoom creates the game and starts the room goroutine.
@@ -59,6 +64,9 @@ func NewRoom(id string, cfg RoomConfig, onClose func(id string)) (*Room, error) 
 	}
 	if cfg.SnapshotEveryTicks <= 0 {
 		cfg.SnapshotEveryTicks = 1
+	}
+	if cfg.AI == (ai.Config{}) {
+		cfg.AI = ai.DefaultConfig()
 	}
 	log := cfg.Logger.With("game_id", id)
 	g, err := game.New(id, cfg.Map, cfg.Rules, cfg.Engine, game.WithLogger(log), game.WithClock(cfg.Now))
@@ -182,6 +190,33 @@ func (r *Room) join(name, token, requestID string, created bool, sub Subscriber)
 	return p.ID, nil
 }
 
+// AddBot adds a server-controlled opponent to a waiting game. It must be
+// called before the human joins so that the human gets side 0 and receives
+// a lobby that already includes the bot. The bot has no Subscriber: it reads
+// the game through Game.ViewFor and submits orders like any player.
+func (r *Room) AddBot(ctx context.Context, name string) (player.ID, error) {
+	var pid player.ID
+	var err error
+	execErr := r.exec(ctx, func() {
+		if r.bot != nil {
+			err = &game.Error{Code: game.CodeGameFull, Message: "game already has a bot"}
+			return
+		}
+		var p *player.Player
+		if p, err = r.g.AddBot(name); err != nil {
+			return
+		}
+		pid = p.ID
+		r.bot = ai.New(p.ID, r.g.Map.Spawns[p.Side], r.cfg.AI, r.log)
+		r.log.Info("bot joined", "player_id", p.ID, "name", p.Name, "side", p.Side)
+		r.broadcastLobby()
+	})
+	if execErr != nil {
+		return "", execErr
+	}
+	return pid, err
+}
+
 // Ready marks the player ready; the game starts when both are.
 func (r *Room) Ready(ctx context.Context, pid player.ID, ready bool) error {
 	var err error
@@ -229,14 +264,17 @@ func (r *Room) Disconnect(pid player.ID, sub Subscriber) {
 		case game.StatusWaiting:
 			_ = r.g.RemovePlayer(pid)
 			r.log.Info("player left lobby", "player_id", pid)
-			if len(r.g.Players()) == 0 {
+			if !r.hasHumans() {
 				r.closing = true
 				return
 			}
 		case game.StatusStarting, game.StatusRunning:
 			r.g.SetConnected(pid, false)
 			r.log.Info("player disconnected", "player_id", pid)
-			if len(r.subs) == 0 {
+			// Against the bot the game goes on: the human may reconnect
+			// within disconnect_grace_ticks or the bot wins by forfeit.
+			// Without a grace period nothing would ever end it: abort.
+			if len(r.subs) == 0 && (r.bot == nil || r.cfg.Rules.DisconnectGraceTicks <= 0) {
 				r.g.Abort("abandoned")
 				r.flushEvents()
 			}
@@ -263,6 +301,8 @@ func (r *Room) Inspect(ctx context.Context, fn func(*game.Game)) error {
 }
 
 // step runs one simulation tick and publishes its results (game loop step 8).
+// The bot decides after the tick, so its orders, like the humans', take
+// effect in the next one.
 func (r *Room) step() {
 	before := r.g.Status
 	events := r.g.Tick()
@@ -270,11 +310,39 @@ func (r *Room) step() {
 	switch st := r.g.Status; {
 	case st == game.StatusFinished && before != game.StatusFinished:
 		r.broadcastSnapshot()
+		if r.bot != nil {
+			r.log.Info("ai stopped", "player_id", r.bot.PlayerID(), "reason", r.g.FinishReason)
+		}
 	case st == game.StatusRunning || st == game.StatusStarting:
 		if r.g.CurrentTick%int64(r.cfg.SnapshotEveryTicks) == 0 {
 			r.broadcastSnapshot()
 		}
 	}
+	r.driveBot()
+}
+
+// driveBot lets the bot evaluate its view of the game and submits its orders
+// through the normal validation. It does nothing once the game is over.
+func (r *Room) driveBot() {
+	if r.bot == nil || r.g.Status != game.StatusRunning || !r.bot.Due(r.g.CurrentTick) {
+		return
+	}
+	for _, dec := range r.bot.Decide(r.g.ViewFor(r.bot.PlayerID())) {
+		if _, err := r.g.SubmitOrder(dec.Order); err != nil {
+			r.log.Warn("ai order rejected", "player_id", dec.Order.PlayerID, "division_id", dec.Order.DivisionID,
+				"type", dec.Order.Type, "code", game.CodeOf(err), "err", err)
+		}
+	}
+}
+
+// hasHumans reports whether a non-bot player is still in the game.
+func (r *Room) hasHumans() bool {
+	for _, p := range r.g.Players() {
+		if !p.Bot {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Room) flushEvents() {

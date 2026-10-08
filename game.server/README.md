@@ -24,6 +24,7 @@ Domain (internal/game)            Game, Division, Order, Battle, GameEvent, Tick
    ├── internal/terrain           tipos de terreno, modificadores, mapa
    └── internal/player            Player
 internal/matchmaking              registro de salas: CreateGame / JoinGame
+internal/ai                       bot por reglas para create_ai_game (sin red ni estado propio del juego)
 internal/config                   todos los valores ajustables (configs/server.json)
 pkg/geom, pkg/idgen               utilidades
 ```
@@ -54,9 +55,27 @@ Cada round también baja la moral (más cuanto mayores las bajas), sube la fatig
 
 **Victoria:** el rival se queda sin divisiones (`annihilation`), se alcanza `max_duration_ticks` (gana quien tenga más tropas, `time_limit`), el rival lleva desconectado más de `disconnect_grace_ticks` (`opponent_disconnected`) o ambos abandonan (`abandoned`, sin ganador).
 
+## Partida contra la IA
+
+`create_ai_game` crea una partida en la que el segundo jugador es un **bot del servidor**. El bot es un jugador normal: tiene su propio `player_id` (`bot-N`), está marcado con `bot: true`, siempre está listo y no tiene conexión WebSocket. La partida empieza cuando el humano envía `ready`, con la cuenta atrás y las condiciones de victoria habituales. Si el humano se desconecta, la partida sigue, puede reconectarse con su token y, pasado `disconnect_grace_ticks`, gana el bot (`opponent_disconnected`). Si abandona en el lobby, la sala se cierra.
+
+La IA (`internal/ai.Bot`) se ejecuta dentro de la goroutine de la `Room`, después de cada tick y cada `ai.decision_interval_ticks`:
+
+1. Lee **solo** `Game.ViewFor(bot)`, así que ve lo mismo que vería un humano en su lugar (respeta la `VisibilityPolicy`).
+2. Decide con reglas deterministas:
+   - **retirarse:** si tiene pocas tropas (`retreat_strength_ratio`) o poca moral (`retreat_morale`, con histéresis hasta `recover_morale`). Ya en la base, defiende.
+   - **defender:** si hay enemigos a menos de `base_threat_radius` de su despliegue, envía las divisiones más cercanas hasta igualar su fuerza.
+   - **atacar:** elige un objetivo por probabilidades (tropas × ataque/defensa × moral × fatiga) y distancia. Reparte el ejército (`max_attackers_per_target`) y solo cambia de objetivo si otro es claramente mejor (`target_switch_factor`). Un ataque ya iniciado continúa mientras las probabilidades superen `keep_attack_odds`.
+   - **reagruparse:** con malas probabilidades (`min_attack_odds`) y aislada (`regroup_radius`), va hacia el aliado más cercano que esté más cerca de su base. El más cercano a la base mantiene la posición.
+   - **mantener posiciones:** no reenvía una orden que la división ya ejecuta, ni repite la misma orden antes de `reissue_cooldown_ticks`. Las divisiones en combate o en desbandada no reciben órdenes.
+3. Envía las órdenes con `Game.SubmitOrder`, con la misma validación que las de un humano. Nunca toca posiciones, tropas ni combates.
+4. Deja de decidir cuando la partida termina.
+
+Cada orden se registra (`msg="ai decision"`) con división, acción, objetivo y motivo. Los cambios de modo se registran como `msg="ai mode changed"`. Como no hay comandantes ni mensajeros, el bot da órdenes con la misma latencia que un jugador humano (se aplican en el siguiente tick).
+
 ## Configuración
 
-`configs/server.json` se generó con `-print-config` y contiene todos los valores: tick rate, rangos, moral, fatiga, ejército inicial, parámetros de combate y la tabla de terreno. Se puede borrar cualquier clave y se usará su valor por defecto. Si el archivo define `army`, reemplaza la lista completa.
+`configs/server.json` se generó con `-print-config` y contiene todos los valores: tick rate, rangos, moral, fatiga, ejército inicial, parámetros de combate, la tabla de terreno y la sección `ai` (parámetros del bot). Se puede borrar cualquier clave y se usará su valor por defecto. Si el archivo define `army`, reemplaza la lista completa.
 
 | Terreno | movimiento | ataque | defensa | visibilidad |
 |---------|-----------|--------|---------|-------------|
@@ -84,6 +103,7 @@ Cada mensaje es un objeto plano con `type`. Todos los mensajes del cliente acept
 
 ```jsonc
 {"type":"create_game","player_name":"Alice"}
+{"type":"create_ai_game","player_name":"Alice"}   // partida contra el bot; responde game_created
 {"type":"join_game","game_id":"game-ab12cd34ef56","player_name":"Bob"}
 {"type":"join_game","game_id":"game-...","session_token":"tok-..."}   // reconexión
 {"type":"ready"}                       // {"type":"ready","ready":false} para cancelar
@@ -99,7 +119,7 @@ Cada mensaje es un objeto plano con `type`. Todos los mensajes del cliente acept
 | type | cuándo |
 |------|--------|
 | `game_created` / `game_joined` | respuesta a create/join: `game_id`, `player_id`, `session_token` (guardarlo para reconectar), `side`, `tick_rate`, `map`, `state` |
-| `lobby_updated` | alguien entra, sale, cambia `ready` o se desconecta |
+| `lobby_updated` | alguien entra, sale, cambia `ready` o se desconecta. Cada jugador lleva `bot: true` si lo controla el servidor |
 | `game_started` | fin de la cuenta atrás, incluye el estado inicial |
 | `game_state` | snapshot autoritativo cada `snapshot_every_ticks` |
 | `order_accepted` | orden validada (se aplica en el próximo tick) |
@@ -161,4 +181,6 @@ El cliente nunca debe mover unidades por su cuenta. Solo interpola entre los sna
 - `game`: validación de órdenes (tabla), restricciones en combate y desbandada, movimiento, encuentros, persecución, DEFEND, colina, retirada, desbandada y reagrupamiento, recuperación, todas las condiciones de victoria, visibilidad
 - integración del game loop: partida completa con un guion en el mapa real (consistencia de eventos e invariantes) y determinismo (dos ejecuciones idénticas)
 - `app`: ciclo de vida de una sala (join, partida llena, ready, inicio, órdenes, reconexión con token, desconexión obsoleta, abandono)
-- `network`: endpoints HTTP y una partida completa por WebSocket real (crear, unirse, iniciar, MOVE, ATTACK, combate, DEFEND, desconexión y victoria)
+- `network`: endpoints HTTP y una partida completa por WebSocket real (crear, unirse, iniciar, MOVE, ATTACK, combate, DEFEND, desconexión y victoria), y una partida contra la IA (`create_ai_game`, bot en el lobby, plaza ocupada, órdenes del humano, el bot actúa y combate)
+- `ai`: atacar, defender la base, retirada y guardia, histéresis de moral y de ataque, reagrupamiento, reparto de objetivos, no repetir órdenes, solo información visible, sin órdenes fuera de RUNNING, determinismo
+- `app` (IA): partida completa contra un humano pasivo hasta el final. Se comprueba que no hay órdenes rechazadas, que las bajas coinciden con los rounds de combate, que la velocidad y el terreno se respetan, que no hay oscilaciones y que el bot no decide después del final. También la victoria del bot por desconexión y el cierre del lobby

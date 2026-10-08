@@ -1,9 +1,11 @@
 class_name MainMenu
 extends Control
-## Entry screen: play locally (mock simulation) or connect to the Go server.
+## Entry screen: play locally (mock simulation), connect to the Go server or
+## play against the server's AI.
 
 signal local_requested(map_id: String, army_id: String)
 signal online_requested(url: String, player_name: String, game_id: String)
+signal ai_requested(url: String, player_name: String)
 
 const DEFAULT_URL := "ws://127.0.0.1:8080/ws"
 
@@ -13,6 +15,8 @@ var _game_id: LineEdit
 var _map_select: OptionButton
 var _army_select: OptionButton
 var _local_info: Label
+## True from a start request until the menu is shown again (no double starts).
+var _busy := false
 
 
 func _ready() -> void:
@@ -62,7 +66,7 @@ func _ready() -> void:
 	_update_local_info()
 
 	var local := UiStyle.button("Partida local (sin servidor)")
-	local.pressed.connect(func() -> void: local_requested.emit(_selected(_map_select), _selected(_army_select)))
+	local.pressed.connect(_on_local_pressed)
 	box.add_child(local)
 	box.add_child(UiStyle.label("Un solo jugador controla ambos ejércitos (Tab para cambiar).", 12, Palette.TEXT_DIM))
 
@@ -76,6 +80,11 @@ func _ready() -> void:
 	var online := UiStyle.button("Conectar")
 	online.pressed.connect(_on_online_pressed)
 	box.add_child(online)
+	var ai := UiStyle.button("Jugar contra IA")
+	ai.pressed.connect(_on_ai_pressed)
+	box.add_child(ai)
+	box.add_child(UiStyle.label("Partida individual contra un bot del servidor (usa la URL de arriba).", 12, Palette.TEXT_DIM))
+	visibility_changed.connect(_on_visibility_changed)
 
 
 ## OptionButton with one item per catalog entry; the id is the item metadata.
@@ -105,8 +114,35 @@ func _line_edit(text: String) -> LineEdit:
 	return e
 
 
-func _on_online_pressed() -> void:
+func _player_name() -> String:
 	var player_name := _name.text.strip_edges()
-	if player_name.is_empty():
-		player_name = "Jugador"
-	online_requested.emit(_url.text.strip_edges(), player_name, _game_id.text.strip_edges())
+	return "Jugador" if player_name.is_empty() else player_name
+
+
+## Back from a battle: the menu accepts a new start request.
+func _on_visibility_changed() -> void:
+	if visible:
+		_busy = false
+
+
+## Marks the menu busy; false if a start is already in progress.
+func _begin_request() -> bool:
+	if _busy:
+		return false
+	_busy = true
+	return true
+
+
+func _on_local_pressed() -> void:
+	if _begin_request():
+		local_requested.emit(_selected(_map_select), _selected(_army_select))
+
+
+func _on_online_pressed() -> void:
+	if _begin_request():
+		online_requested.emit(_url.text.strip_edges(), _player_name(), _game_id.text.strip_edges())
+
+
+func _on_ai_pressed() -> void:
+	if _begin_request():
+		ai_requested.emit(_url.text.strip_edges(), _player_name())

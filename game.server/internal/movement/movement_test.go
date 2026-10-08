@@ -143,3 +143,48 @@ func TestFindPathPrefersFasterTerrain(t *testing.T) {
 		}
 	}
 }
+
+// Regression: leaving a ford next to the water, the smoothed straight line
+// clipped the corner of a water tile between two samples and the unit got
+// stuck ("blocked") on its first step.
+func TestPathDoesNotClipWaterCorners(t *testing.T) {
+	m, err := terrain.DefaultMap(terrain.DefaultTable())
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, to := geom.V(961.5874634287455, 850.1943433885668), geom.V(657.77, 810.22)
+	path, err := FindPath(m, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := from
+	for i := 0; i < 2000 && len(path) > 0; i++ {
+		res := Step(m, StepInput{Position: pos, Waypoints: path, Speed: 30, Multiplier: 1, DT: 0.1})
+		if res.Blocked {
+			t.Fatalf("unit blocked at %v following %v", pos, path)
+		}
+		pos, path = res.Position, res.Waypoints
+	}
+	if !pos.Equal(to) {
+		t.Fatalf("unit did not arrive: %v", pos)
+	}
+	if m.LineOfPassage(from, to) {
+		t.Fatal("a segment clipping a water corner must not count as passable")
+	}
+}
+
+// Regression: an end point lying exactly on a grid line, reached from the
+// positive side, must be checked (it was skipped and water was "passable").
+func TestLineOfPassageEndOnGridLine(t *testing.T) {
+	m, err := terrain.NewMap([]string{"PPPPPPPPPP", "PPPPPPPPPP", "PPPPPPPPPP", "PPWPPPPPPP"}, 30,
+		terrain.DefaultTable(), [2]geom.Vec2{{X: 5, Y: 5}, {X: 5, Y: 5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Passable(geom.V(60, 90)) || m.LineOfPassage(geom.V(285, 15), geom.V(60, 90)) {
+		t.Fatal("segment ending in water reported as passable")
+	}
+	if !m.LineOfPassage(geom.V(285, 15), geom.V(90, 60)) {
+		t.Fatal("segment ending exactly on a tile corner over plain must be passable")
+	}
+}

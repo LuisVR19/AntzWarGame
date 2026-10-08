@@ -132,35 +132,84 @@ func (m *Map) EncodeRows() []string {
 }
 
 // LineOfPassage reports whether a straight segment from a to b crosses only
-// passable tiles. It samples the segment at a fraction of the cell size.
-func (m *Map) LineOfPassage(a, b geom.Vec2) bool {
-	d := a.Dist(b)
-	step := m.CellSize / 4
-	n := int(math.Ceil(d/step)) + 1
-	for i := 0; i <= n; i++ {
-		t := float64(i) / float64(n)
-		p := geom.Vec2{X: a.X + (b.X-a.X)*t, Y: a.Y + (b.Y-a.Y)*t}
-		if !m.Passable(p) {
-			return false
-		}
+// passable tiles.
+func (m *Map) LineOfPassage(a, b geom.Vec2) bool { return m.LineMinMovement(a, b) > 0 }
+
+// LineMinMovement returns the lowest movement modifier among the tiles the
+// segment a-b passes through (0 if any of them is impassable or the segment
+// leaves the map). Tiles are traversed exactly, so a segment that only clips
+// the corner of a water tile is reported as blocked.
+func (m *Map) LineMinMovement(a, b geom.Vec2) float64 {
+	if !m.InBounds(a) || !m.InBounds(b) {
+		return 0
 	}
-	return true
+	minMod := math.Inf(1)
+	m.segmentCells(a, b, func(c Cell) bool {
+		minMod = math.Min(minMod, m.CellModifiers(c).Movement)
+		return minMod > 0
+	})
+	return minMod
 }
 
-// LineMinMovement returns the lowest movement modifier found along the
-// segment a-b (0 if any sample is impassable).
-func (m *Map) LineMinMovement(a, b geom.Vec2) float64 {
-	d := a.Dist(b)
-	step := m.CellSize / 4
-	n := int(math.Ceil(d/step)) + 1
-	minMod := math.Inf(1)
-	for i := 0; i <= n; i++ {
-		t := float64(i) / float64(n)
-		p := geom.Vec2{X: a.X + (b.X-a.X)*t, Y: a.Y + (b.Y-a.Y)*t}
-		if !m.InBounds(p) {
-			return 0
+// segmentCells calls visit for every tile crossed by the segment a-b, in
+// order, until visit returns false (grid traversal of Amanatides & Woo).
+// When the segment passes exactly through a tile corner both side tiles are
+// visited, so diagonal moves cannot slip between two impassable tiles.
+func (m *Map) segmentCells(a, b geom.Vec2, visit func(Cell) bool) {
+	start, end := m.CellAt(a), m.CellAt(b)
+	x0, y0 := a.X/m.CellSize, a.Y/m.CellSize
+	dx, dy := b.X/m.CellSize-x0, b.Y/m.CellSize-y0
+	axis := func(c int, p0, d float64) (step int, tMax, tDelta float64) {
+		switch {
+		case d > 0:
+			return 1, (float64(c+1) - p0) / d, 1 / d
+		case d < 0:
+			return -1, (float64(c) - p0) / d, -1 / d
 		}
-		minMod = math.Min(minMod, m.ModifiersAt(p).Movement)
+		return 0, math.Inf(1), math.Inf(1)
 	}
-	return minMod
+	stepX, tMaxX, tDeltaX := axis(start.Col, x0, dx)
+	stepY, tMaxY, tDeltaY := axis(start.Row, y0, dy)
+	c := start
+	if !visit(c) {
+		return
+	}
+	// Each iteration moves at least one tile closer to the end. Crossings at
+	// t >= 1 are past b (b may lie exactly on a grid line); end is visited
+	// explicitly below.
+	for n := abs(end.Col-start.Col) + abs(end.Row-start.Row); n > 0 && c != end; n-- {
+		if min(tMaxX, tMaxY) >= 1 {
+			break
+		}
+		switch {
+		case tMaxX < tMaxY:
+			c.Col += stepX
+			tMaxX += tDeltaX
+		case tMaxY < tMaxX:
+			c.Row += stepY
+			tMaxY += tDeltaY
+		default:
+			if !visit(Cell{Col: c.Col + stepX, Row: c.Row}) || !visit(Cell{Col: c.Col, Row: c.Row + stepY}) {
+				return
+			}
+			c.Col += stepX
+			c.Row += stepY
+			tMaxX += tDeltaX
+			tMaxY += tDeltaY
+			n--
+		}
+		if !visit(c) {
+			return
+		}
+	}
+	if c != end {
+		visit(end)
+	}
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
