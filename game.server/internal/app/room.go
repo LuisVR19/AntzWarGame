@@ -276,6 +276,19 @@ func (r *Room) AssignCommander(ctx context.Context, req AssignRequest) error {
 	return err
 }
 
+// SetFormation validates a formation change; it is applied on the next
+// tick, whose division_updated (formation_changed) confirms it.
+func (r *Room) SetFormation(ctx context.Context, pid player.ID, id game.DivisionID, formation string) error {
+	var err error
+	if e := r.exec(ctx, func() { err = r.g.SetFormation(pid, id, formation) }); e != nil {
+		return e
+	}
+	if err != nil {
+		r.log.Info("formation rejected", "player_id", pid, "division_id", id, "formation", formation, "code", game.CodeOf(err))
+	}
+	return err
+}
+
 // Disconnect is called by the network when a player's connection drops.
 // It is ignored if sub is no longer the player's active subscriber.
 func (r *Room) Disconnect(pid player.ID, sub Subscriber) {

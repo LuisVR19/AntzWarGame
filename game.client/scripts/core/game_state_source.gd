@@ -64,7 +64,7 @@ func supports_split_merge() -> bool:
 	return false
 
 
-## True if the source implements formations (the Go server does not yet).
+## True if the source implements formations and facing.
 func supports_formations() -> bool:
 	return false
 

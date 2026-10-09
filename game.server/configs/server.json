@@ -39,45 +39,33 @@
     "army": [
       {
         "name": "1st Infantry",
+        "type": "WORKER",
         "offset": {
           "x": 0,
           "y": -150
         },
         "unit_count": 3000,
-        "attack": 10,
-        "defense": 12,
-        "speed": 30,
-        "morale": 80,
-        "experience": 10,
         "leads": "Infantry Command",
         "commander": "Infantry Command"
       },
       {
         "name": "2nd Infantry",
+        "type": "WORKER",
         "offset": {
           "x": 0,
           "y": 150
         },
         "unit_count": 3000,
-        "attack": 10,
-        "defense": 12,
-        "speed": 30,
-        "morale": 80,
-        "experience": 10,
         "commander": "Infantry Command"
       },
       {
         "name": "1st Armored",
+        "type": "SOLDIER",
         "offset": {
           "x": -80,
           "y": 0
         },
         "unit_count": 2000,
-        "attack": 16,
-        "defense": 8,
-        "speed": 45,
-        "morale": 85,
-        "experience": 20,
         "leads": "general"
       }
     ],
@@ -92,7 +80,8 @@
       "defend_defense_bonus": 1.25,
       "attacking_attack_bonus": 1.1,
       "retreating_attack_factor": 0.5,
-      "retreating_defense_factor": 0.7
+      "retreating_defense_factor": 0.7,
+      "volley_casualty_factor": 0.6
     },
     "command": {
       "general_comm_radius": 450,
@@ -105,6 +94,117 @@
       "leadership_morale_bonus": 10,
       "leadership_recovery_factor": 1.5,
       "succession_delay_ticks": 100
+    },
+    "formations": {
+      "COLUMN": {
+        "name": "Columna",
+        "attack": 0.7,
+        "defense_front": 0.75,
+        "defense_flank": 0.5,
+        "defense_rear": 0.5,
+        "speed": 1.35,
+        "frontage": 600,
+        "turn_rate": 90
+      },
+      "LINE": {
+        "name": "Línea",
+        "attack": 1,
+        "defense_front": 1,
+        "defense_flank": 0.75,
+        "defense_rear": 0.55,
+        "speed": 1,
+        "frontage": 2000,
+        "turn_rate": 60
+      },
+      "SHIELD_WALL": {
+        "name": "Muro de escudos",
+        "attack": 0.75,
+        "defense_front": 1.7,
+        "defense_flank": 0.6,
+        "defense_rear": 0.45,
+        "speed": 0.6,
+        "frontage": 1800,
+        "turn_rate": 20
+      },
+      "SQUARE": {
+        "name": "Erizo",
+        "attack": 0.7,
+        "defense_front": 1.25,
+        "defense_flank": 1.25,
+        "defense_rear": 1.25,
+        "speed": 0.45,
+        "frontage": 1600,
+        "turn_rate": 360,
+        "bonus_vs": {
+          "WEDGE": 0.8
+        }
+      },
+      "WEDGE": {
+        "name": "Cuña",
+        "attack": 1.35,
+        "defense_front": 0.85,
+        "defense_flank": 0.6,
+        "defense_rear": 0.5,
+        "speed": 1.1,
+        "frontage": 1000,
+        "turn_rate": 45,
+        "bonus_vs": {
+          "LINE": 1.15,
+          "SHIELD_WALL": 1.4
+        }
+      }
+    },
+    "formation_rules": {
+      "default": "LINE",
+      "change_seconds": 3,
+      "reform_penalty": 0.75,
+      "reform_speed_factor": 0.5
+    },
+    "unit_types": {
+      "ARCHER": {
+        "name": "Arquera",
+        "attack": 5,
+        "defense": 6,
+        "speed": 35,
+        "morale": 75,
+        "experience": 10,
+        "ranged": {
+          "range": 220,
+          "attack": 11
+        }
+      },
+      "SCOUT": {
+        "name": "Exploradora",
+        "attack": 9,
+        "defense": 7,
+        "speed": 70,
+        "morale": 70,
+        "experience": 10
+      },
+      "SOLDIER": {
+        "name": "Soldado",
+        "attack": 16,
+        "defense": 8,
+        "speed": 45,
+        "morale": 85,
+        "experience": 20
+      },
+      "TANK": {
+        "name": "Acorazada",
+        "attack": 11,
+        "defense": 22,
+        "speed": 20,
+        "morale": 95,
+        "experience": 15
+      },
+      "WORKER": {
+        "name": "Obrera",
+        "attack": 10,
+        "defense": 12,
+        "speed": 30,
+        "morale": 80,
+        "experience": 10
+      }
     }
   },
   "terrain": {

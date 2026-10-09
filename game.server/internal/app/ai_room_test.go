@@ -129,9 +129,13 @@ func TestAIGamePlaysByTheRulesUntilTheEnd(t *testing.T) {
 
 	// Check the human's stream: the bot moved, fought and the game ended
 	// through the normal rules.
+	fastest := 0.0
+	for _, f := range rules.Formations {
+		fastest = max(fastest, f.Speed)
+	}
 	maxStep := 0.0
 	for _, tmpl := range rules.Army {
-		maxStep = max(maxStep, tmpl.Speed*rules.RetreatSpeedMultiplier*rules.DT())
+		maxStep = max(maxStep, rules.Resolved(tmpl).Speed*fastest*rules.RetreatSpeedMultiplier*rules.DT())
 	}
 	losses := map[game.DivisionID]int{}
 	destroyed := map[game.DivisionID]bool{}

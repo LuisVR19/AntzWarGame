@@ -55,6 +55,7 @@ func toDivision(d game.DivisionView) DivisionDTO {
 		Attack: d.Attack, Defense: d.Defense, Speed: d.Speed,
 		Morale: round2(d.Morale), Experience: round2(d.Experience), Fatigue: round2(d.Fatigue),
 		State: wire(d.State), Routed: d.Routed, InBattle: d.InBattle, Terrain: wire(d.Terrain),
+		UnitType: wire(d.UnitType), Formation: wire(d.Formation), Facing: round2(d.Facing), Reforming: d.Reforming,
 		Order:       toOrder(d.Order),
 		CommanderID: string(d.CommanderID), CommandLink: wire(d.CommandLink),
 	}
@@ -112,7 +113,7 @@ func toGameState(v *game.GameView) GameStateMessage {
 
 func toBattleSide(s game.BattleSideReport) BattleSideDTO {
 	return BattleSideDTO{
-		DivisionID: string(s.DivisionID), Losses: s.Losses, UnitCount: s.UnitCount,
+		DivisionID: string(s.DivisionID), Exposure: string(s.Exposure), Losses: s.Losses, UnitCount: s.UnitCount,
 		Morale: round2(s.Morale), Fatigue: round2(s.Fatigue),
 		EffectiveAttack: round2(s.EffectiveAttack), EffectiveDefense: round2(s.EffectiveDefense),
 	}
@@ -156,6 +157,13 @@ func encodeEvent(out app.Output) any {
 		return BattleStartedMessage{
 			Type: MsgBattleStarted, Tick: ev.At, BattleID: ev.BattleID,
 			AttackerID: string(ev.AttackerID), DefenderID: string(ev.DefenderID), X: ev.Position.X, Y: ev.Position.Y,
+			AttackerExposure: string(ev.AttackerExposure), DefenderExposure: string(ev.DefenderExposure),
+		}
+	case game.Volley:
+		return VolleyMessage{
+			Type: MsgVolley, Tick: ev.At, ShooterID: string(ev.ShooterID), TargetID: string(ev.TargetID),
+			Losses: ev.Losses, UnitCount: ev.UnitCount, Exposure: string(ev.Exposure),
+			From: toPosition(ev.From), To: toPosition(ev.To),
 		}
 	case game.BattleUpdated:
 		return BattleUpdatedMessage{

@@ -19,6 +19,7 @@ const (
 	MsgRetreatDivision = "retreat_division"
 	MsgHoldDivision    = "hold_division"
 	MsgAssignCommander = "assign_commander"
+	MsgSetFormation    = "set_formation"
 )
 
 // Server -> client.
@@ -37,6 +38,7 @@ const (
 	MsgGameFinished      = "game_finished"
 	MsgCommandUpdated    = "command_updated"
 	MsgMessengerUpdated  = "messenger_updated"
+	MsgVolley            = "volley"
 	MsgError             = "error"
 )
 
@@ -111,6 +113,15 @@ type AssignCommanderRequest struct {
 	CommanderID string `json:"commander_id"`
 }
 
+// SetFormationRequest changes a division's formation ("line",
+// "shield_wall", "wedge", "square", "column"). It is not an order: it does
+// not go through the chain of command. The division reorganizes for a while.
+type SetFormationRequest struct {
+	Envelope
+	DivisionID string `json:"division_id"`
+	Formation  string `json:"formation"`
+}
+
 type HoldDivisionRequest struct {
 	Envelope
 	DivisionID string `json:"division_id"`
@@ -180,6 +191,10 @@ type DivisionDTO struct {
 	Routed       bool          `json:"routed"`
 	InBattle     bool          `json:"in_battle"`
 	Terrain      string        `json:"terrain"`
+	UnitType     string        `json:"unit_type"`
+	Formation    string        `json:"formation"`
+	Facing       float64       `json:"facing"` // radians, world space
+	Reforming    bool          `json:"reforming"`
 	Order        *OrderDTO     `json:"order,omitempty"` // own divisions only
 	Path         []PositionDTO `json:"path,omitempty"`  // own divisions only
 	// Chain of command, own divisions only (absent without command units).
@@ -236,6 +251,7 @@ type BattleDTO struct {
 
 type BattleSideDTO struct {
 	DivisionID       string  `json:"division_id"`
+	Exposure         string  `json:"exposure"` // front, flank, rear
 	Losses           int     `json:"losses"`
 	UnitCount        int     `json:"unit_count"`
 	Morale           float64 `json:"morale"`
@@ -317,6 +333,22 @@ type BattleStartedMessage struct {
 	DefenderID string  `json:"defender_id"`
 	X          float64 `json:"x"`
 	Y          float64 `json:"y"`
+	// Side of each division hit by the other (front, flank, rear).
+	AttackerExposure string `json:"attacker_exposure"`
+	DefenderExposure string `json:"defender_exposure"`
+}
+
+// VolleyMessage: a ranged division shot at an enemy.
+type VolleyMessage struct {
+	Type      string      `json:"type"`
+	Tick      int64       `json:"tick"`
+	ShooterID string      `json:"shooter_id"`
+	TargetID  string      `json:"target_id"`
+	Losses    int         `json:"losses"`
+	UnitCount int         `json:"unit_count"`
+	Exposure  string      `json:"exposure"`
+	From      PositionDTO `json:"from"`
+	To        PositionDTO `json:"to"`
 }
 
 type BattleUpdatedMessage struct {

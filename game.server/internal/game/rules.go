@@ -10,15 +10,22 @@ import (
 
 // DivisionTemplate describes a division created at game start. Offset is
 // relative to the side's spawn and mirrored horizontally for side 1.
+//
+// Type picks a unit type (Rules.UnitTypes): its stats are used for every
+// stat the template leaves at zero. Formation is the starting formation
+// (empty = FormationRules.Default).
 type DivisionTemplate struct {
-	Name       string    `json:"name"`
-	Offset     geom.Vec2 `json:"offset"`
-	UnitCount  int       `json:"unit_count"`
-	Attack     float64   `json:"attack"`
-	Defense    float64   `json:"defense"`
-	Speed      float64   `json:"speed"` // world units per second
-	Morale     float64   `json:"morale"`
-	Experience float64   `json:"experience"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type,omitempty"`
+	Formation string    `json:"formation,omitempty"`
+	Offset    geom.Vec2 `json:"offset"`
+	UnitCount int       `json:"unit_count"`
+	// Stats: 0 (omitted) = the value of Type.
+	Attack     float64 `json:"attack,omitempty"`
+	Defense    float64 `json:"defense,omitempty"`
+	Speed      float64 `json:"speed,omitempty"` // world units per second
+	Morale     float64 `json:"morale,omitempty"`
+	Experience float64 `json:"experience,omitempty"`
 	// Leads makes this division host a command unit: "general" or the name
 	// of a commander. The unit moves with the division and is eliminated
 	// with it.
@@ -113,6 +120,12 @@ type Rules struct {
 	Army    []DivisionTemplate `json:"army"`
 	Combat  combat.Params      `json:"combat"`
 	Command CommandRules       `json:"command"`
+
+	// Formations and unit types (formation.go). Each division has its own
+	// type (base stats, ranged attack) and formation, which it can change.
+	Formations     map[string]Formation `json:"formations"`
+	FormationRules FormationRules       `json:"formation_rules"`
+	UnitTypes      map[string]UnitType  `json:"unit_types"`
 }
 
 // DefaultRules returns the default MVP tuning.
@@ -141,15 +154,18 @@ func DefaultRules() Rules {
 		Army: []DivisionTemplate{
 			// Infantry Command rides with the 1st Infantry and commands both
 			// infantry divisions; the general rides with the armored reserve.
-			{Name: "1st Infantry", Offset: geom.V(0, -150), UnitCount: 3000, Attack: 10, Defense: 12, Speed: 30, Morale: 80, Experience: 10,
+			{Name: "1st Infantry", Type: UnitWorker, Offset: geom.V(0, -150), UnitCount: 3000,
 				Leads: "Infantry Command", Commander: "Infantry Command"},
-			{Name: "2nd Infantry", Offset: geom.V(0, 150), UnitCount: 3000, Attack: 10, Defense: 12, Speed: 30, Morale: 80, Experience: 10,
+			{Name: "2nd Infantry", Type: UnitWorker, Offset: geom.V(0, 150), UnitCount: 3000,
 				Commander: "Infantry Command"},
-			{Name: "1st Armored", Offset: geom.V(-80, 0), UnitCount: 2000, Attack: 16, Defense: 8, Speed: 45, Morale: 85, Experience: 20,
+			{Name: "1st Armored", Type: UnitSoldier, Offset: geom.V(-80, 0), UnitCount: 2000,
 				Leads: LeadsGeneral},
 		},
-		Combat:  combat.DefaultParams(),
-		Command: DefaultCommandRules(),
+		Combat:         combat.DefaultParams(),
+		Command:        DefaultCommandRules(),
+		Formations:     DefaultFormations(),
+		FormationRules: DefaultFormationRules(),
+		UnitTypes:      DefaultUnitTypes(),
 	}
 }
 
@@ -178,7 +194,17 @@ func (r Rules) Validate() error {
 	case len(r.Army) == 0:
 		return errors.New("rules: army must contain at least one division")
 	}
-	for i, t := range r.Army {
+	if err := r.validateFormations(); err != nil {
+		return err
+	}
+	for i, raw := range r.Army {
+		t := r.Resolved(raw)
+		if _, ok := r.UnitTypes[t.Type]; raw.Type != "" && !ok {
+			return fmt.Errorf("rules: army[%d] %q has unknown type %q", i, t.Name, raw.Type)
+		}
+		if !r.hasFormation(t.Formation) {
+			return fmt.Errorf("rules: army[%d] %q has unknown formation %q", i, t.Name, raw.Formation)
+		}
 		if t.UnitCount <= r.DestroyedUnitThreshold || t.Speed <= 0 || t.Attack < 0 || t.Defense <= 0 {
 			return fmt.Errorf("rules: army[%d] %q has invalid stats", i, t.Name)
 		}

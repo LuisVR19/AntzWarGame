@@ -107,7 +107,8 @@ func (g *Game) startBattle(att, def *Division) {
 		Active:      true,
 	}
 	g.battles = append(g.battles, b)
-	g.emit(BattleStarted{At: g.CurrentTick, BattleID: b.ID, AttackerID: att.ID, DefenderID: def.ID, Position: b.Position})
+	g.emit(BattleStarted{At: g.CurrentTick, BattleID: b.ID, AttackerID: att.ID, DefenderID: def.ID, Position: b.Position,
+		AttackerExposure: g.exposure(att, def), DefenderExposure: g.exposure(def, att)})
 	g.log.Info("battle started", "game_id", g.ID, "battle_id", b.ID, "attacker", att.ID, "defender", def.ID, "tick", g.CurrentTick)
 	g.refreshState(att, "battle_started", false)
 	g.refreshState(def, "battle_started", false)
@@ -128,16 +129,26 @@ func (g *Game) stance(d *Division) combat.Stance {
 	return combat.StanceHolding
 }
 
-func (g *Game) combatant(d *Division) combat.Combatant {
+// combatant is d fighting opponent: its formation's attack depends on the
+// opponent's formation and its defense on the side the opponent hits.
+func (g *Game) combatant(d, opponent *Division) combat.Combatant {
+	f := g.Rules.formation(d.Formation)
+	reform := 1.0
+	if d.Reforming() {
+		reform = g.Rules.FormationRules.ReformPenalty
+	}
 	return combat.Combatant{
-		UnitCount:  d.UnitCount,
-		Attack:     d.Attack,
-		Defense:    d.Defense,
-		Morale:     g.combatMorale(d), // leadership bonus, not stored
-		Experience: d.Experience,
-		Fatigue:    d.Fatigue,
-		Terrain:    g.Map.ModifiersAt(d.Position),
-		Stance:     g.stance(d),
+		FormationAttack:  f.AttackVs(opponent.Formation) * reform,
+		FormationDefense: f.Defense(g.exposure(d, opponent)) * reform,
+		Frontage:         f.Frontage,
+		UnitCount:        d.UnitCount,
+		Attack:           d.Attack,
+		Defense:          d.Defense,
+		Morale:           g.combatMorale(d), // leadership bonus, not stored
+		Experience:       d.Experience,
+		Fatigue:          d.Fatigue,
+		Terrain:          g.Map.ModifiersAt(d.Position),
+		Stance:           g.stance(d),
 	}
 }
 
@@ -187,7 +198,8 @@ func (g *Game) updateBattles() {
 }
 
 func (g *Game) resolveRound(b *Battle, att, def *Division) {
-	r := g.engine.ResolveRound(g.combatant(att), g.combatant(def))
+	attSide, defSide := g.exposure(att, def), g.exposure(def, att)
+	r := g.engine.ResolveRound(g.combatant(att, def), g.combatant(def, att))
 	g.applySide(att, r.A)
 	g.applySide(def, r.B)
 	b.Rounds++
@@ -195,7 +207,7 @@ func (g *Game) resolveRound(b *Battle, att, def *Division) {
 	b.DefenderLosses += r.B.Losses
 	g.emit(BattleUpdated{
 		At: g.CurrentTick, BattleID: b.ID, Round: b.Rounds,
-		Attacker: report(att, r.A), Defender: report(def, r.B),
+		Attacker: report(att, r.A, attSide), Defender: report(def, r.B, defSide),
 	})
 	g.log.Debug("combat round", "game_id", g.ID, "battle_id", b.ID, "round", b.Rounds,
 		"attacker_losses", r.A.Losses, "defender_losses", r.B.Losses,
@@ -213,8 +225,9 @@ func (g *Game) resolveRound(b *Battle, att, def *Division) {
 	}
 }
 
-func report(d *Division, r combat.SideResult) BattleSideReport {
+func report(d *Division, r combat.SideResult, side Exposure) BattleSideReport {
 	return BattleSideReport{
+		Exposure:   side,
 		DivisionID: d.ID, Losses: r.Losses, UnitCount: d.UnitCount, Morale: d.Morale, Fatigue: d.Fatigue,
 		EffectiveAttack: r.EffectiveAttack, EffectiveDefense: r.EffectiveDefense,
 	}

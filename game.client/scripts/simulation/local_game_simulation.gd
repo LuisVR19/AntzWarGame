@@ -4,7 +4,8 @@ extends RefCounted
 ## It speaks the same protocol: handle() takes client messages and step()
 ## returns server messages. The UI never sees these objects directly.
 ## Movement uses grid A* (Pathfinder) like the server. Splitting and merging
-## divisions exist only here for now (the Go server does not implement them).
+## divisions exist only here for now (the Go server implements formations,
+## unit types and volleys, but not split/merge, physical space or assist).
 
 const GAME_ID := "local"
 const PLAYER_1 := "player-1"

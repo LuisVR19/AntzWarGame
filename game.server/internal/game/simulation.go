@@ -1,6 +1,8 @@
 package game
 
 import (
+	"math"
+
 	"gameserver/internal/movement"
 	"gameserver/internal/player"
 )
@@ -9,10 +11,10 @@ import (
 // produced. Sending updates to clients (step 8) is the application layer's
 // responsibility.
 //
-//  1. process orders
+//  1. process orders and formation changes
 //  2. update movement
 //  3. detect encounters
-//  4. update battles
+//  4. update battles, facing (formations) and ranged volleys
 //  5. update morale / fatigue
 //  6. chain of command (command units, succession) and messengers
 //  7. check victory conditions
@@ -37,9 +39,12 @@ func (g *Game) Tick() []GameEvent {
 
 	g.CurrentTick++
 	g.processOrders()
+	g.applyFormations()
 	g.updateMovement()
 	g.detectEncounters()
 	g.updateBattles()
+	g.updateFacing()
+	g.updateVolleys()
 	g.updateMoraleFatigue()
 	g.updateCommand()
 	g.updateMessengers()
@@ -77,6 +82,10 @@ func (g *Game) speedMultiplier(d *Division) float64 {
 	if d.State == StateRetreating {
 		m *= g.Rules.RetreatSpeedMultiplier
 	}
+	m *= g.Rules.formation(d.Formation).Speed
+	if d.Reforming() {
+		m *= g.Rules.FormationRules.ReformSpeedFactor
+	}
 	return m
 }
 
@@ -101,7 +110,12 @@ func (g *Game) updateMovement() {
 				g.completeOrder(d, "target_destroyed")
 				continue
 			}
-			if d.Position.Dist(t.Position) <= g.Rules.EngagementRange*0.9 {
+			// Ranged divisions stop as soon as the target is within range.
+			reach := g.Rules.EngagementRange * 0.9
+			if r := g.ranged(d); r != nil {
+				reach = r.Range * 0.9
+			}
+			if d.Position.Dist(t.Position) <= reach {
 				d.path = nil
 				continue
 			}
@@ -124,6 +138,10 @@ func (g *Game) updateMovement() {
 			Multiplier: g.speedMultiplier(d),
 			DT:         dt,
 		})
+		if res.Moved > 0 {
+			// The front looks where it marches.
+			d.Facing = math.Atan2(res.Position.Y-d.Position.Y, res.Position.X-d.Position.X)
+		}
 		d.Position, d.path, d.movedTick = res.Position, res.Waypoints, res.Moved
 		switch {
 		case res.Blocked:

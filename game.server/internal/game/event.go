@@ -17,6 +17,7 @@ const (
 	EventGameFinished      EventType = "game_finished"
 	EventCommandUpdated    EventType = "command_updated"
 	EventMessengerUpdated  EventType = "messenger_updated"
+	EventVolley            EventType = "volley"
 )
 
 // GameEvent is something notable that happened during a tick. Events are
@@ -45,10 +46,14 @@ type BattleStarted struct {
 	AttackerID DivisionID
 	DefenderID DivisionID
 	Position   Position
+	// Side of each division hit by the other when contact was made.
+	AttackerExposure Exposure
+	DefenderExposure Exposure
 }
 
 // BattleSideReport summarizes one side after a combat round.
 type BattleSideReport struct {
+	Exposure         Exposure // side of this division hit this round
 	DivisionID       DivisionID
 	Losses           int
 	UnitCount        int
@@ -144,3 +149,17 @@ func (g *Game) DrainEvents() []GameEvent {
 	g.events = nil
 	return ev
 }
+
+// Volley is emitted when a ranged division shoots at an enemy.
+type Volley struct {
+	At        int64
+	ShooterID DivisionID
+	TargetID  DivisionID
+	Losses    int
+	UnitCount int      // target's soldiers after the volley
+	Exposure  Exposure // side of the target that was hit
+	From, To  Position
+}
+
+func (e Volley) Type() EventType { return EventVolley }
+func (e Volley) Tick() int64     { return e.At }

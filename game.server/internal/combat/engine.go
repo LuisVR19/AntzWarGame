@@ -24,6 +24,20 @@ type Combatant struct {
 	Fatigue    float64 // 0..100
 	Terrain    terrain.Modifiers
 	Stance     Stance
+	// Formation multipliers (0 = no effect). FormationDefense already
+	// depends on the side (front, flank, rear) the blow lands on.
+	FormationAttack  float64
+	FormationDefense float64
+	// Frontage caps the soldiers that strike at once (0 = all of them).
+	Frontage int
+}
+
+// FightingUnits returns the soldiers that can strike at once.
+func (c Combatant) FightingUnits() int {
+	if c.Frontage > 0 && c.Frontage < c.UnitCount {
+		return c.Frontage
+	}
+	return c.UnitCount
 }
 
 // SideResult holds the deltas to apply to one combatant after a round.
@@ -46,4 +60,6 @@ type RoundResult struct {
 // deterministic given their inputs so the simulation stays reproducible.
 type Engine interface {
 	ResolveRound(a, b Combatant) RoundResult
+	// ResolveVolley resolves a ranged shot: only the target suffers.
+	ResolveVolley(shooter, target Combatant) SideResult
 }

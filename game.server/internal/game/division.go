@@ -24,6 +24,12 @@ type Division struct {
 	// CommanderID is the command unit the division reports to ("" = the
 	// general directly). See command.go.
 	CommanderID CommandUnitID
+	// UnitType is the kind of ant (Rules.UnitTypes) and Formation how it is
+	// arranged (Rules.Formations). Facing (radians, world space) is where
+	// its front looks: blows from the flanks or the rear hurt more.
+	UnitType  string
+	Formation string
+	Facing    float64
 
 	// Simulation internals (not part of the public state).
 	home       Position   // deployment point, default retreat target
@@ -31,7 +37,14 @@ type Division struct {
 	pathTarget Position   // position the current path was computed for
 	lastRepath int64      // tick of the last path computation
 	movedTick  float64    // distance moved during the current tick
+	// reformTicks > 0 while reorganizing after a formation change.
+	reformTicks int
+	// volleyCooldown: ticks until a ranged division can shoot again.
+	volleyCooldown int
 }
+
+// Reforming reports whether the division is reorganizing.
+func (d *Division) Reforming() bool { return d.reformTicks > 0 }
 
 // Alive reports whether the division still exists on the field.
 func (d *Division) Alive() bool { return d.State != StateDestroyed }

@@ -50,6 +50,10 @@ func supports_command() -> bool:
 	return true
 
 
+func supports_formations() -> bool:
+	return true
+
+
 func loading_text() -> String:
 	return "Creando partida contra la IA..." if vs_ai else "Conectando..."
 

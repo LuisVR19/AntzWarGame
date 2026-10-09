@@ -479,3 +479,64 @@ func TestWebSocketChainOfCommand(t *testing.T) {
 		t.Fatalf("bad assignment: %+v", e)
 	}
 }
+
+// TestWebSocketFormations: divisions carry type and formation, set_formation
+// changes it through division_updated and bad requests get an error.
+func TestWebSocketFormations(t *testing.T) {
+	srv := newTestServerWith(t, func(cfg *config.Config) {
+		cfg.Game.Army[0].Type = "worker"
+		cfg.Game.Army[1] = game.DivisionTemplate{Name: "Archers", Type: "archer", Formation: "column", Offset: geom.V(700, -300), UnitCount: 1500}
+	})
+	c := dial(t, srv)
+	c.send(map[string]any{"type": "create_ai_game", "player_name": "Alice"})
+	var created GameJoinedMessage
+	c.waitFor(MsgGameCreated, &created)
+	c.send(map[string]any{"type": "ready"})
+	var started GameStartedMessage
+	c.waitFor(MsgGameStarted, &started)
+	var infantry, archers DivisionDTO
+	for _, d := range started.State.Divisions {
+		switch {
+		case d.PlayerID != created.PlayerID:
+		case d.Name == "Archers":
+			archers = d
+		default:
+			infantry = d
+		}
+	}
+	if infantry.UnitType != "worker" || infantry.Formation != "line" || infantry.Facing != 0 {
+		t.Fatalf("infantry: %+v", infantry)
+	}
+	if archers.UnitType != "archer" || archers.Formation != "column" || archers.Attack != 5 {
+		t.Fatalf("archers must take their type's stats: %+v", archers)
+	}
+
+	c.send(map[string]any{"type": "set_formation", "request_id": "f0", "division_id": infantry.ID, "formation": "pentagram"})
+	var bad ErrorMessage
+	c.waitFor(MsgError, &bad)
+	if bad.RequestID != "f0" || bad.Code != string(game.CodeInvalidFormation) {
+		t.Fatalf("unknown formation: %+v", bad)
+	}
+
+	c.send(map[string]any{"type": "set_formation", "request_id": "f1", "division_id": infantry.ID, "formation": "shield_wall"})
+	for {
+		var upd DivisionUpdatedMessage
+		c.waitFor(MsgDivisionUpdated, &upd)
+		if upd.Division.ID == infantry.ID && upd.Reason == "formation_changed" {
+			if upd.Division.Formation != "shield_wall" || !upd.Division.Reforming {
+				t.Fatalf("formation_changed: %+v", upd.Division)
+			}
+			break
+		}
+	}
+	for {
+		var upd DivisionUpdatedMessage
+		c.waitFor(MsgDivisionUpdated, &upd)
+		if upd.Division.ID == infantry.ID && upd.Reason == "formation_ready" {
+			if upd.Division.Reforming {
+				t.Fatal("formation_ready must clear reforming")
+			}
+			return
+		}
+	}
+}

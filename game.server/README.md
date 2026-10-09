@@ -99,6 +99,16 @@ El bonus se calcula en cada round y **nunca se guarda**, así que no se acumula.
 - **Si cae un comandante,** sus divisiones pierden el bonus y pasan a recibir órdenes del general. El jugador puede reasignarlas con `assign_commander` a otro mando activo, siempre que la división esté dentro del `comm_radius` del nuevo mando. Si no lo está, la respuesta es `commander_out_of_range`; así una reasignación no sirve para saltarse un mensajero. La reasignación solo la ve su dueño.
 - **Si cae el general,** las divisiones y los comandantes siguen con sus órdenes. Tras `succession_delay_ticks`, el primer comandante activo asciende a general con sus radios y conserva sus divisiones. Si no queda ninguno, las divisiones conservan su última orden.
 
+## Tipos de hormiga y formaciones
+
+Cada división tiene sus propias propiedades (`internal/game/formation.go`, mismos valores que `game.client/data/definitions/`):
+
+- **Tipo** (`unit_types`): `WORKER` (obrera), `SOLDIER` (soldado), `ARCHER` (arquera), `TANK` (acorazada) y `SCOUT` (exploradora). Da las estadísticas base. En la plantilla del ejército, `type` elige el tipo y cualquier estadística que se escriba lo sobrescribe (si se omite o vale 0, se usa la del tipo).
+- **Formación** (`formations`): `LINE`, `SHIELD_WALL`, `WEDGE`, `SQUARE` y `COLUMN`. Multiplica ataque, velocidad y la defensa **según el lado por el que llega el golpe**: frente (hasta 60° de su orientación), flanco o retaguardia (desde 120°). `frontage` limita los soldados que luchan a la vez y `bonus_vs` da ventaja contra otra formación. En la plantilla, `formation` es la inicial (por defecto `formation_rules.default`).
+- **Orientación** (`facing`): al marchar mira hacia donde avanza; en combate gira hacia su enemigo a `turn_rate` grados/s. Por eso un ataque por el flanco o la espalda hace más daño, sobre todo a formaciones que giran despacio (muro de escudos).
+- **Cambiar de formación** (`set_formation`): no es una orden, así que no pasa por la cadena de mando. Se aplica en el tick siguiente (`division_updated`, `reason: formation_changed`) y la división pasa `formation_rules.change_seconds` reorganizándose (`reforming`), con ataque y defensa × `reform_penalty` y velocidad × `reform_speed_factor`. Al terminar llega `formation_ready`. Errores: `invalid_formation`, `same_formation`, `division_routed`, etc.
+- **Arqueras** (tipo con `ranged`): sin estar en combate ni marchando, disparan una vez por round a un enemigo a menos de `range` (prioridad: su objetivo de ATACAR). Solo sufre el objetivo, con bajas × `combat.volley_casualty_factor`. Con ATACAR se detienen al entrar en alcance en lugar de ir al cuerpo a cuerpo.
+
 ## Partida contra la IA
 
 `create_ai_game` crea una partida en la que el segundo jugador es un **bot del servidor**. El bot es un jugador normal: tiene su propio `player_id` (`bot-N`), está marcado con `bot: true`, siempre está listo y no tiene conexión WebSocket. La partida empieza cuando el humano envía `ready`, con la cuenta atrás y las condiciones de victoria habituales. Si el humano se desconecta, la partida sigue, puede reconectarse con su token y, pasado `disconnect_grace_ticks`, gana el bot (`opponent_disconnected`). Si abandona en el lobby, la sala se cierra.
@@ -164,6 +174,7 @@ Cada mensaje es un objeto plano con `type`. Todos los mensajes del cliente acept
 {"type":"retreat_division","division_id":"division-1"}               // x,y opcionales; por defecto a su despliegue
 {"type":"hold_division","division_id":"division-1"}
 {"type":"assign_commander","division_id":"division-2","commander_id":"commander-4"}   // cadena de mando
+{"type":"set_formation","division_id":"division-1","formation":"shield_wall"}           // line, shield_wall, wedge, square, column
 ```
 
 ### Servidor → cliente
@@ -177,8 +188,11 @@ Cada mensaje es un objeto plano con `type`. Todos los mensajes del cliente acept
 | `order_accepted` | orden validada. `delivery`: `immediate` (se aplica en el próximo tick) o `messenger` (con `messenger_id` y `eta_ticks` estimados) |
 | `messenger_updated` | (solo al dueño) mensajero `pending`/`dispatched`, `delivered` o `cancelled` (`reason`: `superseded`, `recipient_destroyed`, `game_finished` o el código de validación al llegar), con la `order` |
 | `command_updated` | un general o comandante cambia de `status` (`active`, `incapacitated`, `eliminated`; `reason`: `host_routed`, `host_rallied`, `host_destroyed`) o asciende (`promoted`) |
-| `division_updated` | cambia la orden o el estado de una división (`reason`: order, arrived, blocked, battle_started, battle_ended, routed, rallied, target_destroyed) |
-| `battle_started` / `battle_updated` / `battle_ended` | contacto, cada round (bajas, moral, ataque/defensa efectivos) y final |
+| `division_updated` | cambia la orden o el estado de una división (`reason`: order, arrived, blocked, battle_started, battle_ended, routed, rallied, target_destroyed, formation_changed, formation_ready) |
+| `battle_started` / `battle_updated` / `battle_ended` | contacto (con `attacker_exposure` / `defender_exposure`: front, flank o rear), cada round (bajas, moral, ataque/defensa efectivos y `exposure` de cada lado) y final |
+| `volley` | una arquera dispara: `shooter_id`, `target_id`, `losses`, `unit_count`, `exposure`, `from`, `to` |
+
+Cada división del estado lleva además `unit_type`, `formation`, `facing` (radianes) y `reforming`.
 | `division_destroyed` | división eliminada |
 | `game_finished` | `winner_player_id`, `reason`, `result` (victory/defeat/draw para el receptor) |
 | `error` | `code`, `message`, `request_id` |
@@ -258,4 +272,5 @@ El cliente nunca debe mover unidades por su cuenta. Solo interpola entre los sna
   - validación de la plantilla.
 - `ai`: atacar, defender la base, retirada y guardia, histéresis de moral y de ataque, reagrupamiento, reparto de objetivos, no repetir órdenes, solo información visible, sin órdenes fuera de RUNNING, determinismo, respeto de rangos y órdenes pendientes, sin órdenes a divisiones sin mando, reasignación tras la caída de un comandante. También en `app`: las órdenes del bot a divisiones fuera de rango no se aplican antes de que llegue el mensajero
 - `network` (cadena de mando): comandantes y enlaces en el estado, orden con mensajero (`order_accepted`, `messenger_updated` pendiente y entregado, `pending_order`), privacidad frente al rival, `assign_commander` y su error
+- `game` (formaciones): estadísticas del tipo y sobrescrituras de la plantilla, validación, cambio de formación con reorganización, velocidad por formación, frente/flanco/retaguardia, muro de escudos, giro en combate al ritmo de la formación y disparos de arqueras sin cuerpo a cuerpo. En `network`: `set_formation` de extremo a extremo
 - `app` (IA): partida completa contra un humano pasivo hasta el final. Se comprueba que no hay órdenes rechazadas, que las bajas coinciden con los rounds de combate, que la velocidad y el terreno se respetan, que no hay oscilaciones y que el bot no decide después del final. También la victoria del bot por desconexión y el cierre del lobby

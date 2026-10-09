@@ -62,6 +62,8 @@ const (
 	CodeCommanderInactive   ErrorCode = "commander_inactive"
 	CodeInvalidAssignment   ErrorCode = "invalid_assignment"
 	CodeCommanderOutOfRange ErrorCode = "commander_out_of_range"
+	CodeInvalidFormation    ErrorCode = "invalid_formation"
+	CodeSameFormation       ErrorCode = "same_formation"
 )
 
 // Error is a domain error with a client-facing code.

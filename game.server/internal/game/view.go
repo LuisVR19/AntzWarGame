@@ -48,6 +48,10 @@ type DivisionView struct {
 	Routed       bool
 	InBattle     bool
 	Terrain      terrain.Type
+	UnitType     string
+	Formation    string
+	Facing       float64
+	Reforming    bool
 	// Owner-only information (nil/empty for opponents).
 	Order        *OrderView
 	Path         []Position
@@ -186,7 +190,8 @@ func (g *Game) DivisionViewFor(viewer player.ID, id DivisionID) (DivisionView, b
 		Attack: d.Attack, Defense: d.Defense, Speed: d.Speed,
 		Morale: d.Morale, Experience: d.Experience, Fatigue: d.Fatigue,
 		State: d.State, Routed: d.Routed, InBattle: g.engaged(d.ID),
-		Terrain: g.Map.TypeAt(d.Position),
+		Terrain:  g.Map.TypeAt(d.Position),
+		UnitType: d.UnitType, Formation: d.Formation, Facing: d.Facing, Reforming: d.Reforming(),
 	}
 	if viewer == Spectator || viewer == d.PlayerID {
 		if o := d.CurrentOrder; o != nil {
@@ -239,6 +244,8 @@ func (g *Game) EventVisibleTo(e GameEvent, viewer player.ID) bool {
 		return g.battleVisible(viewer, ev.Attacker.DivisionID, ev.Defender.DivisionID)
 	case BattleEnded:
 		return g.battleVisible(viewer, ev.AttackerID, ev.DefenderID)
+	case Volley:
+		return g.battleVisible(viewer, ev.ShooterID, ev.TargetID)
 	case MessengerUpdated:
 		return viewer == Spectator || viewer == ev.PlayerID
 	case CommandUpdated:

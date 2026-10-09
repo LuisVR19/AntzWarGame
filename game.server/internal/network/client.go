@@ -237,6 +237,13 @@ func (c *client) dispatch(data []byte) {
 				c.replyErr(env.RequestID, err)
 			}
 		}
+	case MsgSetFormation:
+		var m SetFormationRequest
+		if c.decode(data, &m, env) && c.requireGame(env) {
+			if err := c.room.SetFormation(ctx, c.playerID, game.DivisionID(m.DivisionID), m.Formation); err != nil {
+				c.replyErr(env.RequestID, err)
+			}
+		}
 	case MsgHoldDivision:
 		var m HoldDivisionRequest
 		if c.decode(data, &m, env) && c.requireGame(env) {

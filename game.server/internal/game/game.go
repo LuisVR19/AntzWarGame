@@ -36,6 +36,8 @@ type Game struct {
 	divisionOrder []*Division
 	battles       []*Battle
 	pending       []pendingOrder
+	// Formation changes validated since the previous tick (formation.go).
+	pendingFormations []pendingFormation
 	// Chain of command (command.go).
 	commandUnits map[CommandUnitID]*CommandUnit
 	commandOrder []*CommandUnit
@@ -298,7 +300,8 @@ func (g *Game) deployArmies() {
 		p := g.players[pid]
 		army := &Army{PlayerID: pid}
 		divs := make([]*Division, 0, len(g.Rules.Army))
-		for _, t := range g.Rules.Army {
+		for _, raw := range g.Rules.Army {
+			t := g.Rules.Resolved(raw)
 			g.divisionSeq++
 			pos := spawnPosition(g.Map, p.Side, t)
 			d := &Division{
@@ -313,6 +316,9 @@ func (g *Game) deployArmies() {
 				Speed:        t.Speed,
 				Morale:       math.Min(t.Morale, g.Rules.MaxMorale),
 				Experience:   t.Experience,
+				UnitType:     t.Type,
+				Formation:    t.Formation,
+				Facing:       initialFacing(p.Side),
 				State:        StateIdle,
 				home:         pos,
 			}
@@ -335,6 +341,7 @@ func (g *Game) finish(winner player.ID, reason string) {
 	g.FinishReason = reason
 	g.FinishedAt = g.now()
 	g.pending = nil
+	g.pendingFormations = nil
 	for _, m := range append([]*Messenger(nil), g.messengers...) {
 		g.endMessenger(m, MessageCancelled, "game_finished")
 	}

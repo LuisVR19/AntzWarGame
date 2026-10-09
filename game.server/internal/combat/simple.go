@@ -21,6 +21,8 @@ type Params struct {
 	AttackingAttackBonus    float64 `json:"attacking_attack_bonus"`
 	RetreatingAttackFactor  float64 `json:"retreating_attack_factor"`
 	RetreatingDefenseFactor float64 `json:"retreating_defense_factor"`
+	// VolleyCasualtyFactor scales the casualties of a ranged volley.
+	VolleyCasualtyFactor float64 `json:"volley_casualty_factor"`
 }
 
 // DefaultParams returns the default tuning.
@@ -37,14 +39,17 @@ func DefaultParams() Params {
 		AttackingAttackBonus:    1.1,
 		RetreatingAttackFactor:  0.5,
 		RetreatingDefenseFactor: 0.7,
+		VolleyCasualtyFactor:    0.6,
 	}
 }
 
 // SimpleEngine is a deterministic, intentionally simple combat model:
 //
-//	effective_attack  = attack  × morale_mod × terrain_attack  × experience_mod × fatigue_mod × stance
-//	effective_defense = defense × morale_mod × terrain_defense × experience_mod × fatigue_mod × stance
-//	losses(B) = units(A) × base_rate × clamp(eff_attack(A) / eff_defense(B))
+//	effective_attack  = attack  × morale_mod × terrain_attack  × experience_mod × fatigue_mod × formation × stance
+//	effective_defense = defense × morale_mod × terrain_defense × experience_mod × fatigue_mod × formation × stance
+//	losses(B) = fighting(A) × base_rate × clamp(eff_attack(A) / eff_defense(B))
+//
+// fighting = min(units, frontage): the rest of the division is a reserve.
 type SimpleEngine struct {
 	P Params
 }
@@ -62,6 +67,7 @@ func FatigueModifier(fatigue float64) float64 { return 1 - 0.3*clamp(fatigue, 0,
 
 func (e *SimpleEngine) EffectiveAttack(c Combatant) float64 {
 	v := c.Attack * MoraleModifier(c.Morale) * c.Terrain.Attack * ExperienceModifier(c.Experience) * FatigueModifier(c.Fatigue)
+	v *= orOne(c.FormationAttack)
 	switch c.Stance {
 	case StanceAttacking:
 		v *= e.P.AttackingAttackBonus
@@ -73,6 +79,7 @@ func (e *SimpleEngine) EffectiveAttack(c Combatant) float64 {
 
 func (e *SimpleEngine) EffectiveDefense(c Combatant) float64 {
 	v := c.Defense * MoraleModifier(c.Morale) * c.Terrain.Defense * ExperienceModifier(c.Experience) * FatigueModifier(c.Fatigue)
+	v *= orOne(c.FormationDefense)
 	switch c.Stance {
 	case StanceDefending:
 		v *= e.P.DefendDefenseBonus
@@ -86,12 +93,22 @@ func (e *SimpleEngine) EffectiveDefense(c Combatant) float64 {
 func (e *SimpleEngine) ResolveRound(a, b Combatant) RoundResult {
 	atkA, defA := e.EffectiveAttack(a), e.EffectiveDefense(a)
 	atkB, defB := e.EffectiveAttack(b), e.EffectiveDefense(b)
-	lossB := e.casualties(a.UnitCount, atkA, defB, b.UnitCount)
-	lossA := e.casualties(b.UnitCount, atkB, defA, a.UnitCount)
+	lossB := e.casualties(a.FightingUnits(), atkA, defB, b.UnitCount)
+	lossA := e.casualties(b.FightingUnits(), atkB, defA, a.UnitCount)
 	return RoundResult{
 		A: e.side(a, lossA, atkA, defA),
 		B: e.side(b, lossB, atkB, defB),
 	}
+}
+
+// ResolveVolley implements Engine: casualties are scaled by
+// VolleyCasualtyFactor and the target gains no fatigue or experience.
+func (e *SimpleEngine) ResolveVolley(shooter, target Combatant) SideResult {
+	atk, def := e.EffectiveAttack(shooter), e.EffectiveDefense(target)
+	losses := e.casualties(shooter.FightingUnits(), atk*e.P.VolleyCasualtyFactor, def, target.UnitCount)
+	r := e.side(target, losses, atk, def)
+	r.FatigueDelta, r.ExperienceDelta = 0, 0
+	return r
 }
 
 func (e *SimpleEngine) casualties(attackerUnits int, atk, def float64, defenderUnits int) int {
@@ -125,6 +142,13 @@ func (e *SimpleEngine) side(c Combatant, losses int, atk, def float64) SideResul
 		EffectiveAttack:  atk,
 		EffectiveDefense: def,
 	}
+}
+
+func orOne(v float64) float64 {
+	if v == 0 {
+		return 1
+	}
+	return v
 }
 
 func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
